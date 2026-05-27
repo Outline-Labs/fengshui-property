@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 import { FlyingStarsGrid } from "@/components/flying-stars-grid";
 import { LuopanCasting } from "@/components/luopan-casting";
+import { TalkToSpecialist } from "@/components/talk-to-specialist";
 import {
   computeFlyingStars,
   type Dir8,
@@ -30,10 +31,14 @@ export function UploadClient({
   remaining: initialRemaining,
   quota,
   canUpgrade,
+  specialistRequested,
+  specialistPhone,
 }: {
   remaining: number;
   quota: number;
   canUpgrade: boolean;
+  specialistRequested: boolean;
+  specialistPhone: string | null;
 }) {
   const [preview, setPreview] = useState<string | null>(null);
   const [facing, setFacing] = useState<string>("");
@@ -294,6 +299,8 @@ export function UploadClient({
                       )
                     : null
                 }
+                specialistRequested={specialistRequested}
+                specialistPhone={specialistPhone}
                 onReset={reset}
               />
             ) : (
@@ -323,10 +330,14 @@ function ReportPlaceholder() {
 function Report({
   analysis,
   chart,
+  specialistRequested,
+  specialistPhone,
   onReset,
 }: {
   analysis: FloorPlanAnalysis;
   chart: FlyingStarChart | null;
+  specialistRequested: boolean;
+  specialistPhone: string | null;
   onReset: () => void;
 }) {
   const positives = analysis.factors.filter((f) => f.type === "positive");
@@ -417,6 +428,11 @@ function Report({
           </ol>
         </section>
       )}
+
+      <TalkToSpecialist
+        requested={specialistRequested}
+        initialPhone={specialistPhone}
+      />
 
       <div className="border-t border-line pt-5">
         <button

@@ -7,6 +7,13 @@ export const leads = sqliteTable("leads", {
   phone: text("phone"),
   propertyInterest: text("property_interest"),
   timeline: text("timeline"),
+  // Verification: a lead is only sellable once the phone is OTP-verified AND
+  // they've explicitly asked to be matched with an agent.
+  phoneVerified: integer("phone_verified").notNull().default(0),
+  wantsAgent: integer("wants_agent").notNull().default(0),
+  verifiedAt: integer("verified_at"),
+  otpCode: text("otp_code"),
+  otpExpiresAt: integer("otp_expires_at"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });

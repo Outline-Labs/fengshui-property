@@ -28,6 +28,8 @@ export default async function UploadPage() {
         remaining={remaining}
         quota={quota}
         canUpgrade={quota < MAX_QUOTA}
+        specialistRequested={lead.wantsAgent === 1}
+        specialistPhone={lead.phone}
       />
     </>
   );

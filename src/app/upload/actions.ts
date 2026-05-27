@@ -1,9 +1,29 @@
 "use server";
 
-import { getCredits, recordAnalysis } from "@/lib/leads";
+import {
+  type OtpResult,
+  getCredits,
+  recordAnalysis,
+  requestOtp,
+  verifyOtpAndRequestAgent,
+} from "@/lib/leads";
 import { analyzeFloorPlanImage } from "@/lib/kimi";
 import { getLeadId } from "@/lib/session";
 import type { FloorPlanAnalysis } from "@/lib/types";
+
+export async function requestSpecialistOtp(phone: string): Promise<OtpResult> {
+  const leadId = await getLeadId();
+  if (!leadId) return { ok: false, error: "Please sign up first." };
+  return requestOtp(leadId, phone);
+}
+
+export async function confirmSpecialist(
+  code: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const leadId = await getLeadId();
+  if (!leadId) return { ok: false, error: "Please sign up first." };
+  return verifyOtpAndRequestAgent(leadId, code);
+}
 
 export type FloorPlanResult =
   | { ok: true; analysis: FloorPlanAnalysis; remaining: number }

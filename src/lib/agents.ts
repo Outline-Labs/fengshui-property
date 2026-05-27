@@ -13,8 +13,8 @@ import {
   leads,
 } from "./db/schema";
 
-export type Tier = "hot" | "warm";
-export const PRICE_CENTS: Record<Tier, number> = { hot: 12000, warm: 5000 };
+// One tier: a verified buyer inquiry (OTP-verified phone + asked for an agent).
+export const VERIFIED_PRICE_CENTS = 8800; // S$88
 
 export function sgd(cents: number): string {
   return `S$${(cents / 100).toFixed(0)}`;
@@ -109,11 +109,11 @@ async function leadStats(): Promise<Map<string, { count: number; top: number | n
 
 export type MarketLead = {
   id: string;
-  tier: Tier;
   priceCents: number;
   propertyInterest: string | null;
   timeline: string | null;
   createdAt: number;
+  verifiedAt: number | null;
   analysisCount: number;
   topScore: number | null;
 };
@@ -127,34 +127,34 @@ export async function listAvailableLeads(): Promise<MarketLead[]> {
 
   const out: MarketLead[] = [];
   for (const l of all) {
-    if (!l.phone || claimed.has(l.id)) continue; // sellable = has contact, unclaimed
+    // Sellable only once OTP-verified AND they asked for an agent.
+    if (l.phoneVerified !== 1 || l.wantsAgent !== 1 || claimed.has(l.id)) {
+      continue;
+    }
     const s = stats.get(l.id) ?? { count: 0, top: null };
-    const tier: Tier = s.count > 0 ? "hot" : "warm";
     out.push({
       id: l.id,
-      tier,
-      priceCents: PRICE_CENTS[tier],
+      priceCents: VERIFIED_PRICE_CENTS,
       propertyInterest: l.propertyInterest,
       timeline: l.timeline,
       createdAt: l.createdAt,
+      verifiedAt: l.verifiedAt,
       analysisCount: s.count,
       topScore: s.top,
     });
   }
-  out.sort((a, b) =>
-    a.tier === b.tier ? b.createdAt - a.createdAt : a.tier === "hot" ? -1 : 1,
-  );
+  out.sort((a, b) => (b.verifiedAt ?? b.createdAt) - (a.verifiedAt ?? a.createdAt));
   return out;
 }
 
 export async function claimLead(
   agentId: string,
   leadId: string,
-): Promise<{ ok: true; tier: Tier } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   await ensureSchema();
   const lr = await db.select().from(leads).where(eq(leads.id, leadId)).limit(1);
   const lead = lr[0];
-  if (!lead || !lead.phone) {
+  if (!lead || lead.phoneVerified !== 1 || lead.wantsAgent !== 1) {
     return { ok: false, error: "That lead is no longer available." };
   }
   const existing = await db
@@ -165,22 +165,19 @@ export async function claimLead(
   if (existing[0]) {
     return { ok: false, error: "Another agent claimed this lead first." };
   }
-  const stats = await leadStats();
-  const s = stats.get(leadId);
-  const tier: Tier = s && s.count > 0 ? "hot" : "warm";
   try {
     await db.insert(claims).values({
       id: crypto.randomUUID(),
       leadId,
       agentId,
-      tier,
-      priceCents: PRICE_CENTS[tier],
+      tier: "verified",
+      priceCents: VERIFIED_PRICE_CENTS,
       claimedAt: Date.now(),
     });
   } catch {
     return { ok: false, error: "Another agent claimed this lead first." };
   }
-  return { ok: true, tier };
+  return { ok: true };
 }
 
 export type MyClaim = {
@@ -218,7 +215,7 @@ export async function listMyClaims(agentId: string): Promise<MyClaim[]> {
 }
 
 export type ClaimedLeadDetail = {
-  tier: Tier;
+  tier: string;
   priceCents: number;
   claimedAt: number;
   lead: Lead;
@@ -242,7 +239,7 @@ export async function getClaimedLeadDetail(
   if (!lead) return null;
   const ar = await db.select().from(analyses).where(eq(analyses.leadId, leadId));
   return {
-    tier: claim.tier as Tier,
+    tier: claim.tier,
     priceCents: claim.priceCents,
     claimedAt: claim.claimedAt,
     lead,

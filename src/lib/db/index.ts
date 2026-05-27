@@ -25,10 +25,29 @@ export function ensureSchema(): Promise<void> {
           phone TEXT,
           property_interest TEXT,
           timeline TEXT,
+          phone_verified INTEGER NOT NULL DEFAULT 0,
+          wants_agent INTEGER NOT NULL DEFAULT 0,
+          verified_at INTEGER,
+          otp_code TEXT,
+          otp_expires_at INTEGER,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
         )
       `);
+      // Idempotent column migrations for pre-existing dev databases.
+      for (const [col, def] of [
+        ["phone_verified", "INTEGER NOT NULL DEFAULT 0"],
+        ["wants_agent", "INTEGER NOT NULL DEFAULT 0"],
+        ["verified_at", "INTEGER"],
+        ["otp_code", "TEXT"],
+        ["otp_expires_at", "INTEGER"],
+      ] as const) {
+        try {
+          await client.execute(`ALTER TABLE leads ADD COLUMN ${col} ${def}`);
+        } catch {
+          // column already exists
+        }
+      }
       await client.execute(`
         CREATE TABLE IF NOT EXISTS analyses (
           id TEXT PRIMARY KEY,
