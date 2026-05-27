@@ -214,6 +214,49 @@ export async function listMyClaims(agentId: string): Promise<MyClaim[]> {
   return out;
 }
 
+function fmtPhone(p: string | null): string {
+  if (!p) return "";
+  const d = p.replace(/\D/g, "").replace(/^65/, "");
+  return /^[89]\d{7}$/.test(d) ? `+65 ${d}` : p;
+}
+
+export type ExportRow = {
+  name: string;
+  phone: string;
+  email: string;
+  propertyInterest: string;
+  timeline: string;
+  readings: string;
+  bestScore: string;
+  claimedDate: string;
+};
+
+export async function getClaimsForExport(agentId: string): Promise<ExportRow[]> {
+  await ensureSchema();
+  const cs = (
+    await db.select().from(claims).where(eq(claims.agentId, agentId))
+  ).sort((a, b) => b.claimedAt - a.claimedAt);
+  const stats = await leadStats();
+  const out: ExportRow[] = [];
+  for (const c of cs) {
+    const lr = await db.select().from(leads).where(eq(leads.id, c.leadId)).limit(1);
+    const l = lr[0];
+    if (!l) continue;
+    const s = stats.get(c.leadId) ?? { count: 0, top: null };
+    out.push({
+      name: l.name ?? "",
+      phone: fmtPhone(l.phone),
+      email: l.email,
+      propertyInterest: l.propertyInterest ?? "",
+      timeline: l.timeline ?? "",
+      readings: String(s.count),
+      bestScore: s.top != null ? `${s.top.toFixed(1)}/10` : "",
+      claimedDate: new Date(c.claimedAt).toISOString().slice(0, 10),
+    });
+  }
+  return out;
+}
+
 export type ClaimedLeadDetail = {
   tier: string;
   priceCents: number;

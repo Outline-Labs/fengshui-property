@@ -106,9 +106,19 @@ export default async function DashboardPage({
         <section>
           <div className="flex items-baseline justify-between border-b border-bg/15 pb-3 mb-6">
             <h2 className="font-display text-2xl tracking-tight">Your claims</h2>
-            <span className="text-[10px] tracking-[0.3em] uppercase text-bg/50">
-              {claims.length}
-            </span>
+            <div className="flex items-center gap-5">
+              {claims.length > 0 && (
+                <a
+                  href="/export"
+                  className="text-[11px] tracking-[0.2em] uppercase text-cinnabar hover:opacity-80"
+                >
+                  Export CSV ↓
+                </a>
+              )}
+              <span className="text-[10px] tracking-[0.3em] uppercase text-bg/50">
+                {claims.length}
+              </span>
+            </div>
           </div>
           {claims.length === 0 ? (
             <p className="text-bg/60 text-sm py-8">
