@@ -2,15 +2,16 @@
 
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
   Coords,
   FengshuiFactor,
   FormSchoolAnalysis,
+  OneMapSearchResult,
 } from "@/lib/types";
 
-import { analyzeProperty, submitLead } from "./actions";
+import { analyzeProperty, searchAddresses, submitLead } from "./actions";
 
 const SG_CENTER: [number, number] = [103.8198, 1.3521];
 const SG_BOUNDS: [[number, number], [number, number]] = [
@@ -49,10 +50,13 @@ const BASEMAP_STYLE: StyleSpecification = {
 
 type Status = "idle" | "loading" | "brief" | "full" | "error";
 
-export function MapClient() {
+export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  // True only while the user is actively typing — suppresses the dropdown
+  // re-opening when we set the query programmatically after a selection.
+  const typingRef = useRef(false);
 
   const [coords, setCoords] = useState<Coords | null>(null);
   const [analysis, setAnalysis] = useState<FormSchoolAnalysis | null>(null);
@@ -60,10 +64,39 @@ export function MapClient() {
   const [unlocked, setUnlocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<OneMapSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+
   useEffect(() => {
     // localStorage is client-only; read once after hydration to set the badge.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setUnlocked(localStorage.getItem("fengshui:unlocked") === "1");
+  }, []);
+
+  const selectLocation = useCallback(async (next: Coords, fly = false) => {
+    const map = mapRef.current;
+    if (markerRef.current) markerRef.current.remove();
+    if (map) {
+      markerRef.current = createMarker(next).addTo(map);
+      if (fly) {
+        map.flyTo({ center: [next.lon, next.lat], zoom: 16, duration: 1100 });
+      }
+    }
+    setCoords(next);
+    setStatus("loading");
+    setError(null);
+    setAnalysis(null);
+    try {
+      const result = await analyzeProperty(next);
+      setAnalysis(result);
+      setStatus(
+        localStorage.getItem("fengshui:unlocked") === "1" ? "full" : "brief",
+      );
+    } catch {
+      setStatus("error");
+      setError("The reading couldn't be drawn just now. Try another spot.");
+    }
   }, []);
 
   useEffect(() => {
@@ -89,34 +122,56 @@ export function MapClient() {
       "top-right",
     );
 
-    map.on("click", async (e) => {
-      const next: Coords = { lat: e.lngLat.lat, lon: e.lngLat.lng };
-
-      if (markerRef.current) markerRef.current.remove();
-      markerRef.current = createMarker(next).addTo(map);
-
-      setCoords(next);
-      setStatus("loading");
-      setError(null);
-      setAnalysis(null);
-
-      try {
-        const result = await analyzeProperty(next);
-        setAnalysis(result);
-        const isUnlocked = localStorage.getItem("fengshui:unlocked") === "1";
-        setStatus(isUnlocked ? "full" : "brief");
-      } catch {
-        setStatus("error");
-        setError("The reading couldn't be drawn just now. Try another spot.");
-      }
+    map.on("click", (e) => {
+      void selectLocation({ lat: e.lngLat.lat, lon: e.lngLat.lng });
     });
 
     mapRef.current = map;
+
+    // Arrived via the homepage search box (/map?q=…) — resolve and fly there.
+    if (initialQuery.trim()) {
+      void (async () => {
+        const r = await searchAddresses(initialQuery);
+        if (r[0]) {
+          typingRef.current = false;
+          setQuery(r[0].label);
+          await selectLocation({ lat: r[0].lat, lon: r[0].lon }, true);
+        }
+      })();
+    }
+
     return () => {
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [initialQuery, selectLocation]);
+
+  // Debounced address autocomplete. Results are display-gated on query length
+  // in render, so no synchronous clear is needed here.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2 || !typingRef.current) return;
+    let active = true;
+    const t = setTimeout(async () => {
+      setSearching(true);
+      const r = await searchAddresses(q);
+      if (active) {
+        setResults(r);
+        setSearching(false);
+      }
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(t);
+    };
+  }, [query]);
+
+  const handleSelectResult = (r: OneMapSearchResult) => {
+    typingRef.current = false;
+    setQuery(r.label);
+    setResults([]);
+    void selectLocation({ lat: r.lat, lon: r.lon }, true);
+  };
 
   const handleUnlock = async (email: string) => {
     if (!coords) return { ok: false as const, error: "No reading yet." };
@@ -133,6 +188,21 @@ export function MapClient() {
     <div className="flex-1 flex flex-col lg:flex-row min-h-0">
       <div className="relative flex-1 min-h-[55vh] lg:min-h-0 bg-bg-warm">
         <div ref={containerRef} className="absolute inset-0 h-full w-full" />
+        <SearchBox
+          query={query}
+          results={query.trim().length >= 2 ? results : []}
+          searching={searching}
+          onChange={(v) => {
+            typingRef.current = true;
+            setQuery(v);
+          }}
+          onSelect={handleSelectResult}
+          onClear={() => {
+            typingRef.current = false;
+            setQuery("");
+            setResults([]);
+          }}
+        />
         <MapHint visible={status === "idle"} />
       </div>
       <aside className="w-full lg:w-[440px] xl:w-[480px] border-t lg:border-t-0 lg:border-l border-line bg-surface overflow-y-auto">
@@ -145,6 +215,82 @@ export function MapClient() {
           onUnlock={handleUnlock}
         />
       </aside>
+    </div>
+  );
+}
+
+function SearchBox({
+  query,
+  results,
+  searching,
+  onChange,
+  onSelect,
+  onClear,
+}: {
+  query: string;
+  results: OneMapSearchResult[];
+  searching: boolean;
+  onChange: (v: string) => void;
+  onSelect: (r: OneMapSearchResult) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="absolute top-4 left-4 right-4 sm:right-auto sm:w-[24rem] z-10">
+      <div className="bg-surface border border-line shadow-[0_8px_28px_-12px_rgba(28,20,14,0.35)]">
+        <div className="flex items-center px-4">
+          <svg
+            className="w-4 h-4 text-cinnabar shrink-0"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden
+          >
+            <circle cx="11" cy="11" r="7" />
+            <line x1="16.5" y1="16.5" x2="21" y2="21" />
+          </svg>
+          <input
+            value={query}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Search any block, street, or condo…"
+            className="flex-1 bg-transparent py-3 pl-3 text-sm placeholder:text-muted focus:outline-none"
+            aria-label="Search Singapore address"
+          />
+          {query && (
+            <button
+              onClick={onClear}
+              className="text-muted hover:text-cinnabar text-xl leading-none px-1"
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          )}
+        </div>
+        {results.length > 0 && (
+          <ul className="border-t border-line-soft max-h-72 overflow-y-auto">
+            {results.map((r, i) => (
+              <li key={`${r.label}-${i}`}>
+                <button
+                  onClick={() => onSelect(r)}
+                  className="w-full text-left px-4 py-2.5 hover:bg-bg-warm transition-colors border-b border-line-soft last:border-0"
+                >
+                  <div className="text-sm text-ink leading-tight">
+                    {r.building && r.building !== r.label ? r.building : r.label}
+                  </div>
+                  <div className="text-[11px] text-muted mt-0.5 truncate">
+                    {r.address}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {searching && results.length === 0 && query.trim().length >= 2 && (
+          <div className="border-t border-line-soft px-4 py-2.5 text-[10px] tracking-[0.3em] uppercase text-muted">
+            Searching…
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -167,13 +313,13 @@ function createMarker(coords: Coords): maplibregl.Marker {
 function MapHint({ visible }: { visible: boolean }) {
   if (!visible) return null;
   return (
-    <div className="absolute top-6 left-1/2 -translate-x-1/2 pointer-events-none">
-      <div className="bg-surface border border-line px-5 py-3 shadow-[0_8px_24px_-12px_rgba(28,20,14,0.25)] text-center max-w-md">
+    <div className="absolute bottom-10 left-1/2 -translate-x-1/2 pointer-events-none px-4 w-full max-w-md">
+      <div className="bg-surface/95 border border-line px-5 py-3 shadow-[0_8px_24px_-12px_rgba(28,20,14,0.25)] text-center">
         <div className="text-[10px] tracking-[0.3em] uppercase text-muted mb-1">
           To begin
         </div>
         <div className="font-display text-lg leading-tight">
-          Click anywhere in Singapore to{" "}
+          Search above, or click anywhere to{" "}
           <em className="text-cinnabar italic">read its qi.</em>
         </div>
       </div>

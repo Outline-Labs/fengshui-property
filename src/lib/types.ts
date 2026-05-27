@@ -36,6 +36,17 @@ export type HDBBlock = {
   lon: number;
 };
 
+export type OneMapSearchResult = {
+  label: string;
+  address: string;
+  block?: string;
+  road?: string;
+  building?: string;
+  postal?: string;
+  lat: number;
+  lon: number;
+};
+
 export type PropertyType = "hdb" | "condo" | "landed";
 
 export type Property = {
