@@ -74,8 +74,37 @@ export function normalizeSgMobile(raw: string): string | null {
 }
 
 async function sendSms(phone: string, message: string): Promise<void> {
-  // TODO(prod): send via Twilio. In dev we log the code.
-  console.log(`[SMS dev] +65 ${phone}: ${message}`);
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const from = process.env.TWILIO_FROM;
+
+  if (!sid || !token || !from) {
+    // Dev fallback: log instead of sending an SMS.
+    console.log(`[SMS dev] +65 ${phone}: ${message}`);
+    return;
+  }
+
+  const body = new URLSearchParams({
+    To: `+65${phone}`,
+    From: from,
+    Body: message,
+  });
+  const auth = Buffer.from(`${sid}:${token}`).toString("base64");
+  try {
+    await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${auth}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body,
+      },
+    );
+  } catch {
+    // best-effort; the user can re-request a code
+  }
 }
 
 export type OtpResult =

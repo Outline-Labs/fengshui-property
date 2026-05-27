@@ -3,9 +3,34 @@ import { agentLogin } from "./actions";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; sent?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, sent } = await searchParams;
+
+  if (sent === "1") {
+    return (
+      <main className="flex-1 px-6 sm:px-10 py-20 sm:py-28">
+        <div className="mx-auto max-w-md">
+          <div className="text-[10px] tracking-[0.35em] uppercase text-jade mb-3">
+            Check your email · 查收
+          </div>
+          <h1 className="font-display text-4xl sm:text-5xl leading-[0.95] tracking-[-0.02em] mb-6">
+            Link <em className="text-cinnabar italic font-normal">sent.</em>
+          </h1>
+          <p className="text-bg/75 leading-relaxed text-sm">
+            If that email belongs to an approved partner, a one-time sign-in
+            link is on its way. It expires in 15 minutes.
+          </p>
+          <p className="mt-10 text-xs">
+            <a href="/login" className="text-cinnabar">
+              ← Use a different email
+            </a>
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex-1 px-6 sm:px-10 py-20 sm:py-28">
       <div className="mx-auto max-w-md">
@@ -16,16 +41,13 @@ export default async function LoginPage({
           Welcome <em className="text-cinnabar italic font-normal">back.</em>
         </h1>
         <p className="text-bg/75 leading-relaxed mb-8 text-sm">
-          Enter the email tied to your approved partner account.
+          Enter your registered email and we&rsquo;ll send a one-time sign-in
+          link.
         </p>
 
-        {error === "notfound" && (
+        {error === "link" && (
           <div className="border border-cinnabar bg-cinnabar/10 px-5 py-3 mb-6 text-sm">
-            No approved account for that email. Did you{" "}
-            <a href="/apply" className="text-cinnabar underline">
-              apply
-            </a>{" "}
-            with your invite code?
+            That link is invalid or has expired. Request a fresh one below.
           </div>
         )}
         {error === "email" && (
@@ -51,7 +73,7 @@ export default async function LoginPage({
             type="submit"
             className="font-display text-xl text-cinnabar inline-flex items-center gap-2 hover:translate-x-1 transition-transform"
           >
-            Enter the dashboard <span aria-hidden>→</span>
+            Email me a sign-in link <span aria-hidden>→</span>
           </button>
         </form>
 

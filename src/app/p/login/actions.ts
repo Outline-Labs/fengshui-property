@@ -1,21 +1,32 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { getApprovedAgentByEmail } from "@/lib/agents";
-import { createAgentSession } from "@/lib/session";
+import { sendEmail } from "@/lib/email";
+import { createMagicToken } from "@/lib/session";
 
-// NOTE: For MVP this signs you in from the registered email alone. Before
-// agents handle real leads, gate this behind an emailed magic link (Resend).
 export async function agentLogin(formData: FormData) {
   const email = (formData.get("email")?.toString() ?? "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     redirect("/login?error=email");
   }
+
   const agent = await getApprovedAgentByEmail(email);
-  if (!agent) {
-    redirect("/login?error=notfound");
+  if (agent) {
+    const token = createMagicToken(agent.id);
+    const h = await headers();
+    const host = h.get("host") ?? "partners.fengshuiai.sg";
+    const proto = host.includes("localhost") ? "http" : "https";
+    const link = `${proto}://${host}/login/verify?token=${encodeURIComponent(token)}`;
+    await sendEmail(
+      email,
+      "Your Fengshui AI Partners sign-in link",
+      `Sign in to your partner dashboard:\n\n${link}\n\nThis link expires in 15 minutes. If you didn't request it, ignore this email.`,
+    );
   }
-  await createAgentSession(agent.id);
-  redirect("/dashboard");
+
+  // Always report "sent" — never reveal whether an email is a registered agent.
+  redirect("/login?sent=1");
 }

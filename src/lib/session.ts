@@ -57,6 +57,23 @@ export async function destroySession(): Promise<void> {
   c.delete(COOKIE);
 }
 
+const MAGIC_TTL_MS = 15 * 60 * 1000;
+
+export function createMagicToken(agentId: string): string {
+  return sign(`${agentId}:${Date.now() + MAGIC_TTL_MS}`);
+}
+
+export function readMagicToken(token: string): string | null {
+  const v = unsign(token);
+  if (!v) return null;
+  const i = v.lastIndexOf(":");
+  if (i < 0) return null;
+  const agentId = v.slice(0, i);
+  const exp = Number(v.slice(i + 1));
+  if (!agentId || !Number.isFinite(exp) || Date.now() > exp) return null;
+  return agentId;
+}
+
 export async function createAgentSession(agentId: string): Promise<void> {
   const c = await cookies();
   c.set(AGENT_COOKIE, sign(agentId), {
