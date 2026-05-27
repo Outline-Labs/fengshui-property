@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored static assets (e.g. the pdf.js worker) — not our source.
+    "public/**",
   ]),
   {
     // The partner surface is served on partners.fengshuiai.sg and routed to

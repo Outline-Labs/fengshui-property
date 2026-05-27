@@ -22,7 +22,15 @@ const DIRECTIONS = [
 
 type Status = "idle" | "ready" | "analyzing" | "done" | "error";
 
-export function UploadClient() {
+export function UploadClient({
+  remaining: initialRemaining,
+  quota,
+  canUpgrade,
+}: {
+  remaining: number;
+  quota: number;
+  canUpgrade: boolean;
+}) {
   const [preview, setPreview] = useState<string | null>(null);
   const [facing, setFacing] = useState<string>("");
   const [year, setYear] = useState<string>("");
@@ -30,22 +38,28 @@ export function UploadClient() {
   const [analysis, setAnalysis] = useState<FloorPlanAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [remaining, setRemaining] = useState(initialRemaining);
   const inputRef = useRef<HTMLInputElement>(null);
+  const outOfCredits = remaining <= 0;
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("Please upload an image (PNG or JPG). PDF support is coming.");
+    const isPdf = file.type === "application/pdf";
+    const isImage = file.type.startsWith("image/");
+    if (!isPdf && !isImage) {
+      setError("Please upload an image (PNG / JPG) or a PDF.");
       setStatus("error");
       return;
     }
     setError(null);
     try {
-      const dataUrl = await resizeImage(file);
+      const dataUrl = isPdf
+        ? await pdfToImageDataUrl(file)
+        : await resizeImage(file);
       setPreview(dataUrl);
       setStatus("ready");
     } catch {
-      setError("Couldn't read that image. Try another file.");
+      setError("Couldn't read that file. Try another one.");
       setStatus("error");
     }
   };
@@ -61,10 +75,15 @@ export function UploadClient() {
     );
     if (result.ok) {
       setAnalysis(result.analysis);
+      setRemaining(result.remaining);
       setStatus("done");
     } else {
+      if (result.code === "no_session") {
+        window.location.href = "/signup?next=/upload";
+        return;
+      }
       setError(result.error);
-      setStatus("error");
+      setStatus(result.code === "out_of_credits" ? "ready" : "error");
     }
   };
 
@@ -93,6 +112,22 @@ export function UploadClient() {
             Lo Shu nine-grid and read it against form school, flying stars
             (Period 9), and eight mansions — room by room.
           </p>
+          <div className="mt-6 flex items-center gap-4 text-[11px] tracking-wide">
+            <span className="inline-flex items-center gap-2 border border-line px-3 py-1.5">
+              <span className={outOfCredits ? "text-muted" : "text-jade"}>●</span>
+              <span className="text-ink-soft">
+                {remaining} of {quota} free reading{quota === 1 ? "" : "s"} left
+              </span>
+            </span>
+            {canUpgrade && (
+              <a
+                href="/signup?next=/upload"
+                className="text-cinnabar hover:underline tracking-wide"
+              >
+                Complete your profile for more →
+              </a>
+            )}
+          </div>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14">
@@ -138,7 +173,7 @@ export function UploadClient() {
                   <input
                     ref={inputRef}
                     type="file"
-                    accept="image/png,image/jpeg,image/webp"
+                    accept="image/png,image/jpeg,image/webp,application/pdf"
                     className="hidden"
                     onChange={(e) => void handleFile(e.target.files?.[0])}
                   />
@@ -146,7 +181,8 @@ export function UploadClient() {
                     Drop your floor plan here
                   </div>
                   <div className="text-sm text-muted">
-                    or click to browse · PNG / JPG · stays private, not stored
+                    or click to browse · PNG / JPG / PDF · stays private, not
+                    stored
                   </div>
                 </label>
               )}
@@ -192,14 +228,44 @@ export function UploadClient() {
             </div>
 
             <div className="pt-2">
-              <button
-                onClick={runAnalysis}
-                disabled={!preview || !facing || status === "analyzing"}
-                className="font-display text-xl text-cinnabar inline-flex items-center gap-2 hover:translate-x-1 transition-transform disabled:opacity-30 disabled:translate-x-0"
-              >
-                {status === "analyzing" ? "Reading the plan…" : "Read my unit"}{" "}
-                <span aria-hidden>→</span>
-              </button>
+              {outOfCredits ? (
+                <div className="border-t border-cinnabar pt-5">
+                  <div className="text-[10px] tracking-[0.3em] uppercase text-cinnabar mb-2">
+                    No free readings left
+                  </div>
+                  <p className="text-ink-soft text-sm leading-relaxed mb-4 max-w-sm">
+                    You&rsquo;ve used your free readings.{" "}
+                    {canUpgrade
+                      ? "Complete your profile to unlock more, or have a local specialist walk you through your unit in person."
+                      : "Have a local property specialist walk you through your unit in person — free."}
+                  </p>
+                  <div className="flex flex-wrap gap-x-8 gap-y-3">
+                    {canUpgrade && (
+                      <a
+                        href="/signup?next=/upload"
+                        className="font-display text-lg text-cinnabar inline-flex items-center gap-2 hover:gap-3 transition-all"
+                      >
+                        Unlock more <span aria-hidden>→</span>
+                      </a>
+                    )}
+                    <a
+                      href="/signup?next=/upload"
+                      className="text-sm text-ink-soft hover:text-cinnabar transition-colors self-center"
+                    >
+                      Talk to a specialist
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={runAnalysis}
+                  disabled={!preview || !facing || status === "analyzing"}
+                  className="font-display text-xl text-cinnabar inline-flex items-center gap-2 hover:translate-x-1 transition-transform disabled:opacity-30 disabled:translate-x-0"
+                >
+                  {status === "analyzing" ? "Reading the plan…" : "Read my unit"}{" "}
+                  <span aria-hidden>→</span>
+                </button>
+              )}
               {error && <p className="text-sm text-cinnabar mt-4">{error}</p>}
               <p className="text-[10px] tracking-wide text-muted mt-5 max-w-sm leading-relaxed">
                 AI-assisted analysis based on traditional fengshui principles —
@@ -420,6 +486,29 @@ function tone(score: number) {
 
 function directionLabel(code: string): string {
   return DIRECTIONS.find((d) => d.code === code)?.label ?? code;
+}
+
+async function pdfToImageDataUrl(file: File, maxDim = 1600): Promise<string> {
+  // Legacy build is transpiled + polyfilled for older runtimes (the modern
+  // build calls Uint8Array.prototype.toHex which many browsers lack). The
+  // matching legacy worker is copied into /public.
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjs.getDocument({ data: buf }).promise;
+  const page = await pdf.getPage(1);
+  const base = page.getViewport({ scale: 1 });
+  const scale = Math.min(maxDim / Math.max(base.width, base.height), 3);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("no canvas context");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+  return canvas.toDataURL("image/jpeg", 0.82);
 }
 
 async function resizeImage(file: File, maxDim = 1600, quality = 0.82): Promise<string> {

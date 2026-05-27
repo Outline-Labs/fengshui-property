@@ -175,7 +175,7 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
 
   const handleUnlock = async (email: string) => {
     if (!coords) return { ok: false as const, error: "No reading yet." };
-    const result = await submitLead(email, coords);
+    const result = await submitLead(email);
     if (result.ok) {
       localStorage.setItem("fengshui:unlocked", "1");
       setUnlocked(true);

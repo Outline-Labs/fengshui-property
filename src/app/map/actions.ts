@@ -1,11 +1,13 @@
 "use server";
 
 import { analyzeFormSchool } from "@/lib/fengshui/form-school";
+import { upsertLead } from "@/lib/leads";
 import {
   formatRevGeocodeAddress,
   reverseGeocode,
   searchAddress,
 } from "@/lib/onemap";
+import { createSession } from "@/lib/session";
 import type {
   Coords,
   FormSchoolAnalysis,
@@ -42,18 +44,18 @@ export type SubmitLeadResult =
   | { ok: true }
   | { ok: false; error: string };
 
-export async function submitLead(
-  email: string,
-  coords: Coords,
-): Promise<SubmitLeadResult> {
+export async function submitLead(email: string): Promise<SubmitLeadResult> {
   const trimmed = email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
     return { ok: false, error: "That email looks incomplete." };
   }
 
-  console.log(
-    `[LEAD] ${new Date().toISOString()} · ${trimmed} · ${coords.lat.toFixed(5)},${coords.lon.toFixed(5)}`,
-  );
+  try {
+    const leadId = await upsertLead({ email: trimmed });
+    await createSession(leadId);
+  } catch {
+    return { ok: false, error: "Couldn't save that just now — try again." };
+  }
 
   return { ok: true };
 }
