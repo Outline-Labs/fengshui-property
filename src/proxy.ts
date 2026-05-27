@@ -7,6 +7,12 @@ function isPartnerHost(host: string): boolean {
   return PARTNER_HOSTS.includes(bare);
 }
 
+function isPartnerPath(path: string): boolean {
+  // The partner surface is exactly /p and everything under /p/. Must NOT match
+  // consumer pages that merely start with "p" (/privacy, /period-9, /pdpa).
+  return path === "/p" || path.startsWith("/p/");
+}
+
 export function proxy(request: NextRequest) {
   const host = request.headers.get("host") ?? "";
   const path = request.nextUrl.pathname;
@@ -14,16 +20,12 @@ export function proxy(request: NextRequest) {
 
   // The agent surface lives only on the partner host. Block any /p access from
   // the consumer host so the funnel can't leak through a guessed URL.
-  if (
-    !partner &&
-    path.startsWith("/p") &&
-    process.env.NODE_ENV === "production"
-  ) {
+  if (!partner && isPartnerPath(path) && process.env.NODE_ENV === "production") {
     return new NextResponse(null, { status: 404 });
   }
 
   let res: NextResponse;
-  if (partner && !path.startsWith("/p")) {
+  if (partner && !isPartnerPath(path)) {
     // Partners see clean URLs (/dashboard); rewrite them onto /p internally.
     const url = request.nextUrl.clone();
     url.pathname = `/p${path === "/" ? "" : path}`;

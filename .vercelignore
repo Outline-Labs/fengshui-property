@@ -1,0 +1,7 @@
+# Keep local-only / sensitive files out of Vercel deployments.
+# Prod config comes from Vercel env vars; prod DB is Turso, not the dev file.
+.env
+.env.*
+!.env.example
+data/*.db
+data/*.db-*
