@@ -9,7 +9,8 @@
     "lint": "eslint",
     "data:pois": "tsx scripts/fetch-pois.ts",
     "demo:poi": "tsx scripts/demo-poi-query.ts",
-    "demo:fengshui": "tsx scripts/demo-fengshui.ts"
+    "demo:fengshui": "tsx scripts/demo-fengshui.ts",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
@@ -26,6 +27,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
