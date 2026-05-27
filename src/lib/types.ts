@@ -70,6 +70,35 @@ export type FengshuiFactor = {
   reference?: string;
 };
 
+export type FloorPlanRoom = {
+  name: string;
+  sector: string;
+  note?: string;
+};
+
+export type FloorPlanFactor = {
+  type: "positive" | "negative";
+  severity: 1 | 2 | 3;
+  title: string;
+  principle: string;
+  description: string;
+};
+
+export type FloorPlanRecommendation = {
+  title: string;
+  detail: string;
+};
+
+export type FloorPlanAnalysis = {
+  score: number;
+  summary: string;
+  facing: string;
+  rooms: FloorPlanRoom[];
+  factors: FloorPlanFactor[];
+  recommendations: FloorPlanRecommendation[];
+  confidence: "high" | "medium" | "low";
+};
+
 export type FormSchoolAnalysis = {
   score: number;
   factors: FengshuiFactor[];
