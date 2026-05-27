@@ -1,8 +1,22 @@
 "use server";
 
 import { analyzeFormSchool } from "@/lib/fengshui/form-school";
-import { formatRevGeocodeAddress, reverseGeocode } from "@/lib/onemap";
-import type { Coords, FormSchoolAnalysis } from "@/lib/types";
+import {
+  formatRevGeocodeAddress,
+  reverseGeocode,
+  searchAddress,
+} from "@/lib/onemap";
+import type {
+  Coords,
+  FormSchoolAnalysis,
+  OneMapSearchResult,
+} from "@/lib/types";
+
+export async function searchAddresses(
+  query: string,
+): Promise<OneMapSearchResult[]> {
+  return searchAddress(query, 6);
+}
 
 export async function analyzeProperty(
   coords: Coords,

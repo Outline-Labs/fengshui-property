@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { Coords } from "./types";
+import type { Coords, OneMapSearchResult } from "./types";
 
 const ONEMAP_BASE = "https://www.onemap.gov.sg";
 
@@ -106,4 +106,62 @@ export function formatRevGeocodeAddress(r: OneMapRevGeocodeResult): string {
     parts.push(`S${r.postalCode}`);
   }
   return parts.join(" · ");
+}
+
+type RawSearchResult = {
+  SEARCHVAL?: string;
+  BLK_NO?: string;
+  ROAD_NAME?: string;
+  BUILDING?: string;
+  ADDRESS?: string;
+  POSTAL?: string;
+  LATITUDE?: string;
+  LONGITUDE?: string;
+};
+
+export async function searchAddress(
+  query: string,
+  limit = 6,
+): Promise<OneMapSearchResult[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const token = getToken();
+  const url = new URL(`${ONEMAP_BASE}/api/common/elastic/search`);
+  url.searchParams.set("searchVal", q);
+  url.searchParams.set("returnGeom", "Y");
+  url.searchParams.set("getAddrDetails", "Y");
+  url.searchParams.set("pageNum", "1");
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: token ? { Authorization: token } : undefined,
+      next: { revalidate: 3600 },
+    });
+  } catch {
+    return [];
+  }
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as { results?: RawSearchResult[] };
+  const clean = (v?: string) => (v && v !== "NIL" ? v.trim() : undefined);
+
+  const out: OneMapSearchResult[] = [];
+  for (const r of (data.results ?? []).slice(0, limit)) {
+    const lat = Number(r.LATITUDE);
+    const lon = Number(r.LONGITUDE);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    out.push({
+      label: (r.SEARCHVAL || r.BUILDING || r.ADDRESS || "").trim(),
+      address: (r.ADDRESS || "").trim(),
+      block: clean(r.BLK_NO),
+      road: clean(r.ROAD_NAME),
+      building: clean(r.BUILDING),
+      postal: clean(r.POSTAL),
+      lat,
+      lon,
+    });
+  }
+  return out;
 }
