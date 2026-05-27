@@ -66,6 +66,74 @@ export async function getLead(id: string): Promise<Lead | null> {
   return r[0] ?? null;
 }
 
+const OTP_TTL_MS = 10 * 60 * 1000;
+
+export function normalizeSgMobile(raw: string): string | null {
+  const digits = raw.replace(/\D/g, "").replace(/^65/, "");
+  return /^[89]\d{7}$/.test(digits) ? digits : null;
+}
+
+async function sendSms(phone: string, message: string): Promise<void> {
+  // TODO(prod): send via Twilio. In dev we log the code.
+  console.log(`[SMS dev] +65 ${phone}: ${message}`);
+}
+
+export type OtpResult =
+  | { ok: true; devCode?: string }
+  | { ok: false; error: string };
+
+export async function requestOtp(
+  leadId: string,
+  rawPhone: string,
+): Promise<OtpResult> {
+  await ensureSchema();
+  const phone = normalizeSgMobile(rawPhone);
+  if (!phone) {
+    return { ok: false, error: "Enter a valid Singapore mobile number." };
+  }
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  await db
+    .update(leads)
+    .set({
+      phone,
+      otpCode: code,
+      otpExpiresAt: Date.now() + OTP_TTL_MS,
+      updatedAt: Date.now(),
+    })
+    .where(eq(leads.id, leadId));
+  await sendSms(phone, `Your Fengshui AI verification code is ${code}`);
+  return process.env.NODE_ENV === "production"
+    ? { ok: true }
+    : { ok: true, devCode: code };
+}
+
+export async function verifyOtpAndRequestAgent(
+  leadId: string,
+  code: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await ensureSchema();
+  const lead = await getLead(leadId);
+  if (!lead) return { ok: false, error: "Session expired — please refresh." };
+  if (!lead.otpCode || !lead.otpExpiresAt || Date.now() > lead.otpExpiresAt) {
+    return { ok: false, error: "That code has expired. Request a new one." };
+  }
+  if (code.trim() !== lead.otpCode) {
+    return { ok: false, error: "That code doesn't match." };
+  }
+  await db
+    .update(leads)
+    .set({
+      phoneVerified: 1,
+      wantsAgent: 1,
+      verifiedAt: Date.now(),
+      otpCode: null,
+      otpExpiresAt: null,
+      updatedAt: Date.now(),
+    })
+    .where(eq(leads.id, leadId));
+  return { ok: true };
+}
+
 export async function recordAnalysis(
   leadId: string,
   kind: string,

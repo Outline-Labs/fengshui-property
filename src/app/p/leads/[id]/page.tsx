@@ -40,11 +40,7 @@ export default async function LeadDetailPage({
 
         <header className="mt-6 border-b border-bg/15 pb-6">
           <div className="flex items-center gap-3 text-[10px] tracking-[0.3em] uppercase text-bg/50 mb-3">
-            <span
-              className={`px-2 py-1 ${tier === "hot" ? "bg-cinnabar text-bg" : "border border-bg/30 text-bg/70"}`}
-            >
-              {tier} lead
-            </span>
+            <span className="px-2 py-1 bg-cinnabar text-bg">{tier} lead</span>
             <span>claimed · {sgd(priceCents)}</span>
             <span>{new Date(claimedAt).toLocaleDateString("en-SG")}</span>
           </div>

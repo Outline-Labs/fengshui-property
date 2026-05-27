@@ -97,7 +97,7 @@ export default async function DashboardPage({
           ) : (
             <ul className="space-y-3">
               {leads.map((l) => (
-                <LeadRow key={l.id} lead={l} ago={ago(l.createdAt)} />
+                <LeadRow key={l.id} lead={l} ago={ago(l.verifiedAt ?? l.createdAt)} />
               ))}
             </ul>
           )}
@@ -129,16 +129,17 @@ export default async function DashboardPage({
 }
 
 function LeadRow({ lead, ago }: { lead: MarketLead; ago: string }) {
-  const hot = lead.tier === "hot";
+  const readings =
+    lead.analysisCount > 0
+      ? ` · ${lead.analysisCount} reading${lead.analysisCount > 1 ? "s" : ""}${
+          lead.topScore != null ? ` · best ${lead.topScore.toFixed(1)}/10` : ""
+        }`
+      : "";
   return (
     <li className="border border-bg/15 hover:border-bg/30 transition-colors p-5 flex flex-wrap items-center gap-x-8 gap-y-3">
       <div className="flex items-center gap-3">
-        <span
-          className={`text-[10px] tracking-[0.25em] uppercase px-2 py-1 ${
-            hot ? "bg-cinnabar text-bg" : "border border-bg/30 text-bg/70"
-          }`}
-        >
-          {lead.tier}
+        <span className="text-[10px] tracking-[0.25em] uppercase px-2 py-1 bg-cinnabar text-bg">
+          verified
         </span>
         <span className="numeral text-xl">{sgd(lead.priceCents)}</span>
       </div>
@@ -148,10 +149,7 @@ function LeadRow({ lead, ago }: { lead: MarketLead; ago: string }) {
         </div>
         <div className="text-[11px] tracking-wide text-bg/50 mt-0.5">
           {lead.timeline ? `${lead.timeline} · ` : ""}
-          {hot
-            ? `uploaded a floor plan${lead.topScore != null ? ` · best ${lead.topScore.toFixed(1)}/10` : ""}`
-            : "provided contact"}{" "}
-          · {ago}
+          phone verified{readings} · {ago}
         </div>
       </div>
       <form action={claimAction}>
