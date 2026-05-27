@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { CopyText } from "@/components/copy-text";
 import { getClaimedLeadDetail, sgd } from "@/lib/agents";
 import { getAgentId } from "@/lib/session";
 
@@ -28,6 +29,11 @@ export default async function LeadDetailPage({
 
   const pitchPoints = buildPitch(lead, analyses, best);
 
+  const digits = (lead.phone ?? "").replace(/\D/g, "").replace(/^65/, "");
+  const isSg = /^[89]\d{7}$/.test(digits);
+  const phoneDisplay = isSg ? `+65 ${digits}` : (lead.phone ?? "—");
+  const phoneCopy = isSg ? `+65${digits}` : (lead.phone ?? "");
+
   return (
     <main className="flex-1">
       <div className="mx-auto max-w-3xl px-6 sm:px-10 py-12 sm:py-16">
@@ -50,7 +56,20 @@ export default async function LeadDetailPage({
         </header>
 
         <section className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-6">
-          <Field label="Phone / WhatsApp" value={lead.phone ?? "—"} accent />
+          <div className="border-t border-bg/20 pt-3">
+            <div className="text-[10px] tracking-[0.3em] uppercase text-bg/50 mb-1">
+              Phone / WhatsApp
+            </div>
+            {lead.phone ? (
+              <CopyText
+                value={phoneCopy}
+                label={phoneDisplay}
+                className="text-cinnabar text-base"
+              />
+            ) : (
+              <div className="text-base text-bg/90">—</div>
+            )}
+          </div>
           <Field label="Email" value={lead.email} />
           <Field
             label="Property of interest"

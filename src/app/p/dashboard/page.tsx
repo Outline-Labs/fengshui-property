@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { CopyText } from "@/components/copy-text";
 import {
   type MarketLead,
   type MyClaim,
@@ -126,7 +127,7 @@ export default async function DashboardPage({
               and pitch package.
             </p>
           ) : (
-            <ul className="divide-y divide-bg/10">
+            <ul className="space-y-3">
               {claims.map((c) => (
                 <ClaimRow key={c.leadId} claim={c} ago={ago(c.claimedAt)} />
               ))}
@@ -173,29 +174,61 @@ function LeadRow({ lead, ago }: { lead: MarketLead; ago: string }) {
 }
 
 function ClaimRow({ claim, ago }: { claim: MyClaim; ago: string }) {
+  const digits = (claim.phone ?? "").replace(/\D/g, "").replace(/^65/, "");
+  const isSg = /^[89]\d{7}$/.test(digits);
+  const phoneDisplay = isSg ? `+65 ${digits}` : (claim.phone ?? "—");
+  const phoneCopy = isSg ? `+65${digits}` : (claim.phone ?? "");
+  const meta = [
+    claim.propertyInterest || null,
+    claim.timeline || null,
+    claim.readings > 0
+      ? `${claim.readings} reading${claim.readings > 1 ? "s" : ""}${
+          claim.bestScore != null ? ` · best ${claim.bestScore.toFixed(1)}/10` : ""
+        }`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <li className="py-4 flex flex-wrap items-center gap-x-8 gap-y-2">
-      <span className="text-[10px] tracking-[0.25em] uppercase text-bg/50 w-12">
-        {claim.tier}
-      </span>
-      <div className="flex-1 min-w-[12rem]">
-        <a
-          href={`/leads/${claim.leadId}`}
-          className="text-sm text-bg hover:text-cinnabar transition-colors"
-        >
-          {claim.name ?? claim.email}
-        </a>
-        <div className="text-[11px] tracking-wide text-bg/50 mt-0.5">
-          {claim.phone ?? "—"} · {ago}
+    <li className="border border-bg/15 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3">
+        <div className="min-w-[14rem]">
+          <a
+            href={`/leads/${claim.leadId}`}
+            className="font-display text-xl tracking-tight hover:text-cinnabar transition-colors"
+          >
+            {claim.name ?? claim.email}
+          </a>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-sm">
+            {claim.phone && (
+              <CopyText
+                value={phoneCopy}
+                label={phoneDisplay}
+                className="text-cinnabar"
+              />
+            )}
+            <span className="text-bg/60">{claim.email}</span>
+          </div>
+          {meta && (
+            <div className="text-[11px] tracking-wide text-bg/50 mt-1.5">
+              {meta}
+            </div>
+          )}
+        </div>
+        <div className="text-right">
+          <div className="numeral text-sm text-bg/60">{sgd(claim.priceCents)}</div>
+          <div className="text-[10px] tracking-[0.2em] uppercase text-bg/40 mt-1">
+            claimed {ago}
+          </div>
+          <a
+            href={`/leads/${claim.leadId}`}
+            className="text-sm text-cinnabar hover:underline mt-2 inline-block"
+          >
+            Open →
+          </a>
         </div>
       </div>
-      <span className="numeral text-sm text-bg/60">{sgd(claim.priceCents)}</span>
-      <a
-        href={`/leads/${claim.leadId}`}
-        className="text-sm text-cinnabar hover:underline"
-      >
-        Open →
-      </a>
     </li>
   );
 }

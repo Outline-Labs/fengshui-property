@@ -189,16 +189,21 @@ export type MyClaim = {
   name: string | null;
   phone: string | null;
   propertyInterest: string | null;
+  timeline: string | null;
+  readings: number;
+  bestScore: number | null;
 };
 
 export async function listMyClaims(agentId: string): Promise<MyClaim[]> {
   await ensureSchema();
   const cs = await db.select().from(claims).where(eq(claims.agentId, agentId));
+  const stats = await leadStats();
   const out: MyClaim[] = [];
   for (const c of cs) {
     const lr = await db.select().from(leads).where(eq(leads.id, c.leadId)).limit(1);
     const l = lr[0];
     if (!l) continue;
+    const s = stats.get(c.leadId) ?? { count: 0, top: null };
     out.push({
       leadId: c.leadId,
       tier: c.tier,
@@ -208,6 +213,9 @@ export async function listMyClaims(agentId: string): Promise<MyClaim[]> {
       name: l.name,
       phone: l.phone,
       propertyInterest: l.propertyInterest,
+      timeline: l.timeline,
+      readings: s.count,
+      bestScore: s.top,
     });
   }
   out.sort((a, b) => b.claimedAt - a.claimedAt);
