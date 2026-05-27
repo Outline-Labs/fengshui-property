@@ -14,7 +14,7 @@ export default function PdpaPage() {
       title="Data Protection Notice"
       cn="个人资料保护"
       updated="27 May 2026"
-      intro="This notice sets out how Outline Labs complies with Singapore's Personal Data Protection Act (PDPA). It complements our full Privacy Policy."
+      intro="This notice sets out how Fengshui AI complies with Singapore's Personal Data Protection Act (PDPA). It complements our full Privacy Policy."
     >
       <LegalSection n="1" title="Consent">
         <p>

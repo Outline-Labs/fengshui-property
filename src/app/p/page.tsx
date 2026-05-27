@@ -291,7 +291,7 @@ function PartnersFooter() {
     <footer className="py-12 mt-auto">
       <div className="mx-auto max-w-7xl px-6 sm:px-10 flex flex-wrap items-center justify-between gap-3 text-[10px] tracking-[0.3em] uppercase text-bg/40">
         <span>
-          © 2026 · Outline Labs · Volume{" "}
+          © 2026 · Fengshui AI · Volume{" "}
           <span className="numeral">01</span> · Partners surface
         </span>
         <span className="font-cn text-xs tracking-normal text-bg/50">

@@ -35,7 +35,7 @@ export function SiteFooter() {
         </div>
         <div className="border-t border-bg/10 pt-6 flex flex-wrap items-center justify-between gap-3 text-[10px] tracking-[0.3em] uppercase text-bg/50">
           <span>
-            © 2026 · Outline Labs · Volume 01 · Period{" "}
+            © 2026 · Fengshui AI · Volume 01 · Period{" "}
             <span className="font-cn text-bg/70">九</span>
           </span>
           <span className="font-cn text-bg/60 tracking-normal text-xs">

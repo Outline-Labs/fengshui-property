@@ -30,7 +30,7 @@ export function LegalShell({
             </h1>
             <p className="mt-5 text-ink-soft leading-relaxed">{intro}</p>
             <div className="mt-5 text-[10px] tracking-[0.3em] uppercase text-muted">
-              Last updated {updated} · Outline Labs · fengshuiai.sg
+              Last updated {updated} · fengshuiai.sg
             </div>
           </header>
           <div className="mt-12 space-y-10">{children}</div>

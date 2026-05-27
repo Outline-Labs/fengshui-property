@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       title="Privacy Policy"
       cn="隐私政策"
       updated="27 May 2026"
-      intro="This policy explains what personal data fengshuiai.sg (operated by Outline Labs) collects, why, who we share it with, and the choices you have. It is written to comply with Singapore's Personal Data Protection Act (PDPA)."
+      intro="This policy explains what personal data fengshuiai.sg (operated by Fengshui AI) collects, why, who we share it with, and the choices you have. It is written to comply with Singapore's Personal Data Protection Act (PDPA)."
     >
       <LegalSection n="1" title="What we collect">
         <p>Depending on how you use the service, we may collect:</p>
