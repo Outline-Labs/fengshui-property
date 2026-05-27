@@ -14,7 +14,7 @@ export default function TermsPage() {
       title="Terms of Service"
       cn="服务条款"
       updated="27 May 2026"
-      intro="These terms govern your use of fengshuiai.sg, operated by Outline Labs. By using the service you agree to them."
+      intro="These terms govern your use of fengshuiai.sg, operated by Fengshui AI. By using the service you agree to them."
     >
       <LegalSection n="1" title="What we provide">
         <p>
@@ -61,7 +61,7 @@ export default function TermsPage() {
         <p>
           If you opt in, we may introduce you to a licensed property agent. Any
           dealings, agreements, or transactions between you and that agent are
-          solely between the two of you; Outline Labs is not a party to them and
+          solely between the two of you; Fengshui AI is not a party to them and
           is not an estate agency.
         </p>
       </LegalSection>
@@ -77,7 +77,7 @@ export default function TermsPage() {
       <LegalSection n="7" title="Limitation of liability">
         <p>
           To the fullest extent permitted by law, the service is provided
-          &ldquo;as is&rdquo;, and Outline Labs is not liable for any loss or
+          &ldquo;as is&rdquo;, and Fengshui AI is not liable for any loss or
           damage arising from your use of, or reliance on, a reading or a
           specialist introduction.
         </p>
