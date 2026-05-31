@@ -36,6 +36,7 @@ export function ensureSchema(): Promise<void> {
           verified_at INTEGER,
           otp_code TEXT,
           otp_expires_at INTEGER,
+          otp_attempts INTEGER NOT NULL DEFAULT 0,
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
         )
@@ -47,6 +48,7 @@ export function ensureSchema(): Promise<void> {
         ["verified_at", "INTEGER"],
         ["otp_code", "TEXT"],
         ["otp_expires_at", "INTEGER"],
+        ["otp_attempts", "INTEGER NOT NULL DEFAULT 0"],
       ] as const) {
         try {
           await client.execute(`ALTER TABLE leads ADD COLUMN ${col} ${def}`);

@@ -2,9 +2,10 @@
 
 import {
   type OtpResult,
-  getCredits,
-  recordAnalysis,
+  finalizeReading,
+  releaseReading,
   requestOtp,
+  reserveReading,
   verifyOtpAndRequestAgent,
 } from "@/lib/leads";
 import { analyzeFloorPlanImage } from "@/lib/kimi";
@@ -46,16 +47,17 @@ export async function analyzeFloorPlan(
     return { ok: false, error: "Please sign up to read your unit.", code: "no_session" };
   }
 
-  const credits = await getCredits(leadId);
-  if (!credits.lead) {
-    return { ok: false, error: "Please sign up to read your unit.", code: "no_session" };
-  }
-  if (credits.remaining <= 0) {
-    return {
-      ok: false,
-      error: "You've used all your free readings.",
-      code: "out_of_credits",
-    };
+  // Atomically claim a credit BEFORE the paid Kimi call so concurrent uploads
+  // can't overspend the quota; refund it if the analysis fails.
+  const reservation = await reserveReading(leadId, "floor_plan");
+  if (!reservation.ok) {
+    return reservation.reason === "no_session"
+      ? { ok: false, error: "Please sign up to read your unit.", code: "no_session" }
+      : {
+          ok: false,
+          error: "You've used all your free readings.",
+          code: "out_of_credits",
+        };
   }
 
   try {
@@ -64,9 +66,10 @@ export async function analyzeFloorPlan(
       facing,
       yearBuilt: yearBuilt && yearBuilt > 1900 ? yearBuilt : undefined,
     });
-    await recordAnalysis(leadId, "floor_plan", facing, analysis.score);
-    return { ok: true, analysis, remaining: credits.remaining - 1 };
+    await finalizeReading(reservation.id, facing, analysis.score);
+    return { ok: true, analysis, remaining: reservation.remaining };
   } catch (e) {
+    await releaseReading(reservation.id); // refund the credit on failure
     return {
       ok: false,
       error:

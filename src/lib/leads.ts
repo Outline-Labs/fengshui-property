@@ -1,7 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { db, ensureSchema } from "./db";
 import { analyses, type Lead, leads } from "./db/schema";
@@ -67,6 +67,10 @@ export async function getLead(id: string): Promise<Lead | null> {
 }
 
 const OTP_TTL_MS = 10 * 60 * 1000;
+// Brute-force guard: after this many wrong guesses the code is invalidated and
+// the lead must request a fresh one. The OTP is the anti-fraud keystone, so it
+// must not be guessable by hammering a fixed 6-digit code.
+const OTP_MAX_ATTEMPTS = 5;
 
 export function normalizeSgMobile(raw: string): string | null {
   const digits = raw.replace(/\D/g, "").replace(/^65/, "");
@@ -120,13 +124,16 @@ export async function requestOtp(
   if (!phone) {
     return { ok: false, error: "Enter a valid Singapore mobile number." };
   }
-  const code = String(Math.floor(100000 + Math.random() * 900000));
+  // CSPRNG, not Math.random — this is a security token. padStart keeps
+  // leading-zero codes (e.g. "004217") valid and the space uniform.
+  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
   await db
     .update(leads)
     .set({
       phone,
       otpCode: code,
       otpExpiresAt: Date.now() + OTP_TTL_MS,
+      otpAttempts: 0,
       updatedAt: Date.now(),
     })
     .where(eq(leads.id, leadId));
@@ -147,6 +154,25 @@ export async function verifyOtpAndRequestAgent(
     return { ok: false, error: "That code has expired. Request a new one." };
   }
   if (code.trim() !== lead.otpCode) {
+    const attempts = (lead.otpAttempts ?? 0) + 1;
+    if (attempts >= OTP_MAX_ATTEMPTS) {
+      // Lock out: clear the code so further guesses fail and a new SMS is
+      // required, resetting the attacker's budget to zero.
+      await db
+        .update(leads)
+        .set({
+          otpCode: null,
+          otpExpiresAt: null,
+          otpAttempts: attempts,
+          updatedAt: Date.now(),
+        })
+        .where(eq(leads.id, leadId));
+      return { ok: false, error: "Too many attempts. Request a new code." };
+    }
+    await db
+      .update(leads)
+      .set({ otpAttempts: attempts, updatedAt: Date.now() })
+      .where(eq(leads.id, leadId));
     return { ok: false, error: "That code doesn't match." };
   }
   await db
@@ -157,27 +183,61 @@ export async function verifyOtpAndRequestAgent(
       verifiedAt: Date.now(),
       otpCode: null,
       otpExpiresAt: null,
+      otpAttempts: 0,
       updatedAt: Date.now(),
     })
     .where(eq(leads.id, leadId));
   return { ok: true };
 }
 
-export async function recordAnalysis(
+export type ReserveResult =
+  | { ok: true; id: string; remaining: number }
+  | { ok: false; reason: "no_session" | "out_of_credits" };
+
+/**
+ * Atomically claim one reading credit. The conditional INSERT ... WHERE
+ * (count < quota) is a single statement, so concurrent uploads can't both pass
+ * a check-then-insert window and overspend the quota (each upload is a paid
+ * Kimi call). Returns the reservation id to finalize() or release().
+ */
+export async function reserveReading(
   leadId: string,
-  kind: string,
+  kind = "floor_plan",
+): Promise<ReserveResult> {
+  await ensureSchema();
+  const lead = await getLead(leadId);
+  if (!lead) return { ok: false, reason: "no_session" };
+  const quota = computeQuota(lead);
+  const id = crypto.randomUUID();
+  const now = Date.now();
+
+  const res = await db.run(sql`
+    INSERT INTO analyses (id, lead_id, kind, facing, score, created_at)
+    SELECT ${id}, ${leadId}, ${kind}, NULL, NULL, ${now}
+    WHERE (SELECT COUNT(*) FROM analyses WHERE lead_id = ${leadId}) < ${quota}
+  `);
+  if (res.rowsAffected !== 1) return { ok: false, reason: "out_of_credits" };
+
+  const used = (
+    await db.select({ id: analyses.id }).from(analyses).where(eq(analyses.leadId, leadId))
+  ).length;
+  return { ok: true, id, remaining: Math.max(0, quota - used) };
+}
+
+/** Record the result onto a reserved reading once the analysis succeeds. */
+export async function finalizeReading(
+  id: string,
   facing: string,
   score: number,
 ): Promise<void> {
   await ensureSchema();
-  await db.insert(analyses).values({
-    id: crypto.randomUUID(),
-    leadId,
-    kind,
-    facing,
-    score,
-    createdAt: Date.now(),
-  });
+  await db.update(analyses).set({ facing, score }).where(eq(analyses.id, id));
+}
+
+/** Refund a reserved reading when the analysis fails, freeing the credit. */
+export async function releaseReading(id: string): Promise<void> {
+  await ensureSchema();
+  await db.delete(analyses).where(eq(analyses.id, id));
 }
 
 export type Credits = {

@@ -14,6 +14,7 @@ export const leads = sqliteTable("leads", {
   verifiedAt: integer("verified_at"),
   otpCode: text("otp_code"),
   otpExpiresAt: integer("otp_expires_at"),
+  otpAttempts: integer("otp_attempts").notNull().default(0),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
