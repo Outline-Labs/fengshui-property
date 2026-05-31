@@ -5,14 +5,18 @@ import { drizzle } from "drizzle-orm/libsql";
 
 import * as schema from "./schema";
 
-// Accept either our own names or the TURSO_* names the Vercel Marketplace
-// integration injects, so the DB works however it was provisioned.
+// Accept our own names, the bare TURSO_* names, OR the STORAGE_TURSO_* names
+// that the Vercel → Turso Marketplace integration actually injects — so the DB
+// connects however it was provisioned. (Local dev falls back to a file.)
 const url =
   process.env.DATABASE_URL ||
   process.env.TURSO_DATABASE_URL ||
+  process.env.STORAGE_TURSO_DATABASE_URL ||
   "file:./data/fengshui.db";
 const authToken =
-  process.env.DATABASE_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN;
+  process.env.DATABASE_AUTH_TOKEN ||
+  process.env.TURSO_AUTH_TOKEN ||
+  process.env.STORAGE_TURSO_AUTH_TOKEN;
 
 const client = createClient(authToken ? { url, authToken } : { url });
 
