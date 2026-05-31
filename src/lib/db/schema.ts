@@ -12,6 +12,9 @@ export const leads = sqliteTable("leads", {
   phoneVerified: integer("phone_verified").notNull().default(0),
   wantsAgent: integer("wants_agent").notNull().default(0),
   verifiedAt: integer("verified_at"),
+  // Legacy: OTP codes were stored here when we managed them ourselves. Twilio
+  // Verify now owns the code lifecycle, so these are unused — kept to avoid a
+  // destructive migration on existing databases.
   otpCode: text("otp_code"),
   otpExpiresAt: integer("otp_expires_at"),
   otpAttempts: integer("otp_attempts").notNull().default(0),

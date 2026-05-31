@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
 
 import { db, ensureSchema } from "./db";
 import { analyses, leads } from "./db/schema";
@@ -74,46 +75,99 @@ describe("reading credits — atomic quota enforcement", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The OTP gate is the anti-fraud keystone of the whole marketplace, so it must
-// resist brute force: a bounded number of wrong guesses, after which the code
-// is invalidated and a new one must be requested.
+// Phone verification runs through Twilio Verify — Twilio owns the code
+// (generation, expiry, attempt limits). Our job is to (a) validate the SG
+// number, (b) start a verification, (c) flip the sellable flags only when
+// Twilio reports the code "approved". A missing config must fail closed in
+// production (no bypass), while dev/test use a fixed "000000" fallback.
 // ---------------------------------------------------------------------------
-describe("OTP verification — brute-force resistance", () => {
-  it("locks the code after too many wrong attempts (even the right code then fails)", async () => {
+describe("phone verification (Twilio Verify) — dev fallback", () => {
+  it("rejects an invalid SG mobile before starting verification", async () => {
     const id = await freshLead({ email: "e@test.sg" });
-    const otp = await requestOtp(id, "91234567");
-    expect(otp.ok).toBe(true);
-    const code = otp.ok ? otp.devCode! : "";
-    expect(code).toMatch(/^\d{6}$/);
-
-    // Hammer with wrong guesses.
-    for (let i = 0; i < 6; i++) {
-      const wrong = await verifyOtpAndRequestAgent(id, "000000");
-      expect(wrong.ok).toBe(false);
-    }
-    // The correct code must no longer work — the lead has to request a new one.
-    const afterLock = await verifyOtpAndRequestAgent(id, code);
-    expect(afterLock.ok).toBe(false);
+    expect((await requestOtp(id, "12345")).ok).toBe(false);
   });
 
-  it("verifies on the correct code within the attempt budget", async () => {
+  it("starts verification, stores the normalised phone, returns the dev code", async () => {
     const id = await freshLead({ email: "f@test.sg" });
-    const otp = await requestOtp(id, "98765432");
-    const code = otp.ok ? otp.devCode! : "";
-    await verifyOtpAndRequestAgent(id, "111111"); // one wrong try
-    const ok = await verifyOtpAndRequestAgent(id, code);
-    expect(ok.ok).toBe(true);
+    const otp = await requestOtp(id, "9123 4567");
+    expect(otp.ok).toBe(true);
+    expect(otp.ok && otp.devCode).toBe("000000");
+    expect((await db.select().from(leads))[0]?.phone).toBe("91234567");
+  });
 
+  it("verifies on the right code and flips the sellable flags", async () => {
+    const id = await freshLead({ email: "g@test.sg" });
+    await requestOtp(id, "98765432");
+    expect((await verifyOtpAndRequestAgent(id, "000000")).ok).toBe(true);
     const row = (await db.select().from(leads))[0];
     expect(row?.phoneVerified).toBe(1);
     expect(row?.wantsAgent).toBe(1);
   });
 
-  it("issues 6-digit codes (incl. leading zeros) from a CSPRNG range", async () => {
-    const id = await freshLead({ email: "g@test.sg" });
-    for (let i = 0; i < 20; i++) {
-      const otp = await requestOtp(id, "91110000");
-      expect(otp.ok && otp.devCode).toMatch(/^\d{6}$/);
-    }
+  it("rejects a wrong code and leaves the lead unsellable", async () => {
+    const id = await freshLead({ email: "h@test.sg" });
+    await requestOtp(id, "98765432");
+    expect((await verifyOtpAndRequestAgent(id, "123456")).ok).toBe(false);
+    expect((await db.select().from(leads))[0]?.phoneVerified).toBe(0);
+  });
+
+  it("won't verify before a code was requested (no phone on the lead)", async () => {
+    const id = await freshLead({ email: "i@test.sg" });
+    expect((await verifyOtpAndRequestAgent(id, "000000")).ok).toBe(false);
+  });
+});
+
+describe("phone verification (Twilio Verify) — API wiring (mocked)", () => {
+  beforeEach(() => {
+    vi.stubEnv("TWILIO_ACCOUNT_SID", "ACtest");
+    vi.stubEnv("TWILIO_AUTH_TOKEN", "tok");
+    vi.stubEnv("TWILIO_VERIFY_SERVICE_SID", "VAtest");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("calls the Verify service and does NOT leak a dev code", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ status: "pending" }), { status: 201 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const id = await freshLead({ email: "j@test.sg" });
+    const otp = await requestOtp(id, "91234567");
+    expect(otp.ok).toBe(true);
+    expect(otp.ok && otp.devCode).toBeUndefined();
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/Services/VAtest/Verifications",
+    );
+  });
+
+  it("approves only when Twilio returns status=approved", async () => {
+    const id = await freshLead({ email: "k@test.sg" });
+    await db.update(leads).set({ phone: "91234567" }).where(eq(leads.id, id));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ status: "approved" }), { status: 200 }),
+      ),
+    );
+    expect((await verifyOtpAndRequestAgent(id, "424242")).ok).toBe(true);
+  });
+
+  it("rejects a non-approved status from Twilio", async () => {
+    const id = await freshLead({ email: "l@test.sg" });
+    await db.update(leads).set({ phone: "91234567" }).where(eq(leads.id, id));
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ status: "pending" }), { status: 200 }),
+      ),
+    );
+    expect((await verifyOtpAndRequestAgent(id, "000000")).ok).toBe(false);
   });
 });
