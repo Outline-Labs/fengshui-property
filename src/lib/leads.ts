@@ -66,48 +66,79 @@ export async function getLead(id: string): Promise<Lead | null> {
   return r[0] ?? null;
 }
 
-const OTP_TTL_MS = 10 * 60 * 1000;
-// Brute-force guard: after this many wrong guesses the code is invalidated and
-// the lead must request a fresh one. The OTP is the anti-fraud keystone, so it
-// must not be guessable by hammering a fixed 6-digit code.
-const OTP_MAX_ATTEMPTS = 5;
-
 export function normalizeSgMobile(raw: string): string | null {
   const digits = raw.replace(/\D/g, "").replace(/^65/, "");
   return /^[89]\d{7}$/.test(digits) ? digits : null;
 }
 
-async function sendSms(phone: string, message: string): Promise<void> {
+// Twilio Verify owns the OTP lifecycle (code generation, delivery, expiry,
+// attempt limits, and SG sender provisioning). We only start a verification
+// and check the user's code against it — we never store the code ourselves.
+const VERIFY_BASE = "https://verify.twilio.com/v2";
+
+function verifyConfig() {
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_FROM;
+  const service = process.env.TWILIO_VERIFY_SERVICE_SID;
+  return sid && token && service ? { sid, token, service } : null;
+}
 
-  if (!sid || !token || !from) {
-    // Dev fallback: log instead of sending an SMS.
-    console.log(`[SMS dev] +65 ${phone}: ${message}`);
-    return;
+function verifyAuthHeader(sid: string, token: string): string {
+  return `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`;
+}
+
+/**
+ * Start an SMS verification. Without Twilio creds we fall back to a fixed dev
+ * code ("000000") so local/test flows work offline — but NEVER in production,
+ * where a missing config must fail closed rather than accept a bypass code.
+ */
+async function startVerification(
+  phone: string,
+): Promise<{ ok: boolean; devCode?: string }> {
+  const cfg = verifyConfig();
+  if (!cfg) {
+    if (process.env.NODE_ENV === "production") return { ok: false };
+    console.log(`[OTP dev] +65 ${phone}: use code 000000`);
+    return { ok: true, devCode: "000000" };
   }
-
-  const body = new URLSearchParams({
-    To: `+65${phone}`,
-    From: from,
-    Body: message,
-  });
-  const auth = Buffer.from(`${sid}:${token}`).toString("base64");
   try {
-    await fetch(
-      `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`,
+    const res = await fetch(`${VERIFY_BASE}/Services/${cfg.service}/Verifications`, {
+      method: "POST",
+      headers: {
+        Authorization: verifyAuthHeader(cfg.sid, cfg.token),
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({ To: `+65${phone}`, Channel: "sms" }),
+    });
+    return { ok: res.ok };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** Check a user-entered code; true only when Twilio marks it "approved". */
+async function checkVerification(phone: string, code: string): Promise<boolean> {
+  const cfg = verifyConfig();
+  if (!cfg) {
+    return process.env.NODE_ENV !== "production" && code.trim() === "000000";
+  }
+  try {
+    const res = await fetch(
+      `${VERIFY_BASE}/Services/${cfg.service}/VerificationCheck`,
       {
         method: "POST",
         headers: {
-          Authorization: `Basic ${auth}`,
+          Authorization: verifyAuthHeader(cfg.sid, cfg.token),
           "Content-Type": "application/x-www-form-urlencoded",
         },
-        body,
+        body: new URLSearchParams({ To: `+65${phone}`, Code: code.trim() }),
       },
     );
+    if (!res.ok) return false;
+    const data = (await res.json()) as { status?: string };
+    return data.status === "approved";
   } catch {
-    // best-effort; the user can re-request a code
+    return false;
   }
 }
 
@@ -124,23 +155,17 @@ export async function requestOtp(
   if (!phone) {
     return { ok: false, error: "Enter a valid Singapore mobile number." };
   }
-  // CSPRNG, not Math.random — this is a security token. padStart keeps
-  // leading-zero codes (e.g. "004217") valid and the space uniform.
-  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+  // Persist the phone so the check targets the same number; Twilio Verify
+  // holds the code.
   await db
     .update(leads)
-    .set({
-      phone,
-      otpCode: code,
-      otpExpiresAt: Date.now() + OTP_TTL_MS,
-      otpAttempts: 0,
-      updatedAt: Date.now(),
-    })
+    .set({ phone, updatedAt: Date.now() })
     .where(eq(leads.id, leadId));
-  await sendSms(phone, `Your Fengshui AI verification code is ${code}`);
-  return process.env.NODE_ENV === "production"
-    ? { ok: true }
-    : { ok: true, devCode: code };
+  const started = await startVerification(phone);
+  if (!started.ok) {
+    return { ok: false, error: "Couldn't send a code right now. Please try again." };
+  }
+  return started.devCode ? { ok: true, devCode: started.devCode } : { ok: true };
 }
 
 export async function verifyOtpAndRequestAgent(
@@ -150,30 +175,15 @@ export async function verifyOtpAndRequestAgent(
   await ensureSchema();
   const lead = await getLead(leadId);
   if (!lead) return { ok: false, error: "Session expired — please refresh." };
-  if (!lead.otpCode || !lead.otpExpiresAt || Date.now() > lead.otpExpiresAt) {
-    return { ok: false, error: "That code has expired. Request a new one." };
+  if (!lead.phone) {
+    return { ok: false, error: "Request a code first." };
   }
-  if (code.trim() !== lead.otpCode) {
-    const attempts = (lead.otpAttempts ?? 0) + 1;
-    if (attempts >= OTP_MAX_ATTEMPTS) {
-      // Lock out: clear the code so further guesses fail and a new SMS is
-      // required, resetting the attacker's budget to zero.
-      await db
-        .update(leads)
-        .set({
-          otpCode: null,
-          otpExpiresAt: null,
-          otpAttempts: attempts,
-          updatedAt: Date.now(),
-        })
-        .where(eq(leads.id, leadId));
-      return { ok: false, error: "Too many attempts. Request a new code." };
-    }
-    await db
-      .update(leads)
-      .set({ otpAttempts: attempts, updatedAt: Date.now() })
-      .where(eq(leads.id, leadId));
-    return { ok: false, error: "That code doesn't match." };
+  const approved = await checkVerification(lead.phone, code);
+  if (!approved) {
+    return {
+      ok: false,
+      error: "That code is incorrect or expired. Request a new one if needed.",
+    };
   }
   await db
     .update(leads)
@@ -181,9 +191,6 @@ export async function verifyOtpAndRequestAgent(
       phoneVerified: 1,
       wantsAgent: 1,
       verifiedAt: Date.now(),
-      otpCode: null,
-      otpExpiresAt: null,
-      otpAttempts: 0,
       updatedAt: Date.now(),
     })
     .where(eq(leads.id, leadId));

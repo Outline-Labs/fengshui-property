@@ -28,7 +28,7 @@ Set these in **Vercel → Project → Settings → Environment Variables** (Prod
 | `ONEMAP_PASSWORD` | **Yes** | OneMap account password |
 | `TWILIO_ACCOUNT_SID` | Launch | Twilio console |
 | `TWILIO_AUTH_TOKEN` | Launch | Twilio console |
-| `TWILIO_FROM` | Launch | Twilio sender number, `+65…` |
+| `TWILIO_VERIFY_SERVICE_SID` | Launch | Twilio Verify Service SID (`VA…`) — create a Verify Service in the Console |
 | `RESEND_API_KEY` | Launch | resend.com |
 | `EMAIL_FROM` | Launch | e.g. `Fengshui AI <noreply@fengshuiai.sg>` (verified Resend domain) |
 | `ONEMAP_TOKEN` | No | Static-token fallback; only used if email/password are unset |
