@@ -1,19 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// Hosts that map to the agent surface. Env-driven (comma-separated) so prod and
-// staging can differ — e.g. PARTNER_HOSTS="partners.staging.fengshuiai.sg" on
-// staging — without a code change. Default covers production + local dev.
-const PARTNER_HOSTS = (
-  process.env.PARTNER_HOSTS ?? "partners.fengshuiai.sg,partners.localhost"
-)
-  .split(",")
-  .map((h) => h.trim().toLowerCase())
-  .filter(Boolean);
-
-function isPartnerHost(host: string): boolean {
-  const bare = host.toLowerCase().split(":")[0];
-  return PARTNER_HOSTS.includes(bare);
-}
+import { isPartnerHost } from "@/lib/partner-hosts";
 
 function isPartnerPath(path: string): boolean {
   // The partner surface is exactly /p and everything under /p/. Must NOT match

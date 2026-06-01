@@ -1,9 +1,6 @@
 import { getClaimsForExport } from "@/lib/agents";
+import { csvCell } from "@/lib/csv";
 import { getAgentId } from "@/lib/session";
-
-function cell(v: string): string {
-  return /[",\n\r]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-}
 
 export async function GET() {
   const agentId = await getAgentId();
@@ -40,7 +37,7 @@ export async function GET() {
   // BOM so Excel reads UTF-8 (names/Chinese) correctly; CRLF line endings.
   const bom = String.fromCharCode(0xfeff);
   const csv =
-    bom + lines.map((row) => row.map(cell).join(",")).join("\r\n");
+    bom + lines.map((row) => row.map(csvCell).join(",")).join("\r\n");
 
   const today = new Date().toISOString().slice(0, 10);
   return new Response(csv, {

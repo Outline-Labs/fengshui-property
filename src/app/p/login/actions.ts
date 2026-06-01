@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { getApprovedAgentByEmail } from "@/lib/agents";
 import { sendEmail } from "@/lib/email";
+import { safePartnerHost } from "@/lib/partner-hosts";
 import { createMagicToken } from "@/lib/session";
 
 export async function agentLogin(formData: FormData) {
@@ -17,7 +18,9 @@ export async function agentLogin(formData: FormData) {
   if (agent) {
     const token = createMagicToken(agent.id);
     const h = await headers();
-    const host = h.get("host") ?? "partners.fengshuiai.sg";
+    // Allowlist the host so a forged Host header can't point the sign-in link
+    // at an attacker domain that would capture the token.
+    const host = safePartnerHost(h.get("host"));
     const proto = host.includes("localhost") ? "http" : "https";
     const link = `${proto}://${host}/login/verify?token=${encodeURIComponent(token)}`;
     await sendEmail(
