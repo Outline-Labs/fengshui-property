@@ -8,6 +8,7 @@ export type POICategory =
   | "hospital"
   | "clinic"
   | "park"
+  | "water"
   | "religious"
   | "school"
   | "mrt_station"

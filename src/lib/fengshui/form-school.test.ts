@@ -297,13 +297,60 @@ describe("analyzeFormSchool — parks (positive, gated)", () => {
     expect(r.score).toBe(5.6);
   });
 
-  it("3+ parks within 500m → severity 2", () => {
+  it("3 parks within 500m → severity 2", () => {
     MOCK_POIS = [poi("park", 250), poi("park", 350), poi("park", 450)];
     const r = analyzeFormSchool(BASE);
     expect(r.factors).toHaveLength(1);
     expect(r.factors[0].severity).toBe(2);
     expect(r.factors[0].title).toContain("3 green space");
     expect(r.score).toBe(6.2); // 5 + 2*0.6
+  });
+
+  it("4+ parks within 500m → severity 3 (abundant greenery)", () => {
+    MOCK_POIS = [poi("park", 200), poi("park", 300), poi("park", 400), poi("park", 480)];
+    const r = analyzeFormSchool(BASE);
+    expect(r.factors).toHaveLength(1);
+    expect(r.factors[0].severity).toBe(3);
+    expect(r.factors[0].title).toContain("4 green space");
+    expect(r.score).toBe(6.8); // 5 + 3*0.6
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Water — positive, the strongest environmental factor (水主财). Three bands
+// by proximity, mirroring the cemetery bands but favourable.
+// ---------------------------------------------------------------------------
+describe("analyzeFormSchool — water (positive, 水主财)", () => {
+  it("<=100m → waterfront, positive severity 3", () => {
+    MOCK_POIS = [poi("water", 80, "Kallang River")];
+    const r = analyzeFormSchool(BASE);
+    expect(r.factors).toHaveLength(1);
+    expect(r.factors[0].type).toBe("positive");
+    expect(r.factors[0].category).toBe("water");
+    expect(r.factors[0].severity).toBe(3);
+    expect(r.factors[0].reference).toBe("mock-1");
+    expect(r.factors[0].title).toContain("Water frontage");
+    expect(r.score).toBe(6.8); // 5 + 3*0.6
+  });
+
+  it("(100, 300] → positive severity 2", () => {
+    MOCK_POIS = [poi("water", 250, "MacRitchie Reservoir")];
+    const r = analyzeFormSchool(BASE);
+    expect(r.factors[0].severity).toBe(2);
+    expect(r.factors[0].type).toBe("positive");
+    expect(r.score).toBe(6.2); // 5 + 2*0.6
+  });
+
+  it("(300, 500] → positive severity 1", () => {
+    MOCK_POIS = [poi("water", 450)];
+    const r = analyzeFormSchool(BASE);
+    expect(r.factors[0].severity).toBe(1);
+    expect(r.score).toBe(5.6); // 5 + 1*0.6
+  });
+
+  it("beyond 500m → no water factor", () => {
+    MOCK_POIS = [poi("water", 600)];
+    expect(analyzeFormSchool(BASE).factors).toHaveLength(0);
   });
 });
 
@@ -463,17 +510,21 @@ describe("analyzeFormSchool — combined factors", () => {
     expect(r.score).toBe(0);
   });
 
-  it("score ceiling is 10 (many positives clamp at ten)", () => {
+  it("a top-tier location (waterfront + abundant greenery + MRT + school) scores in the high 9s, never above 10", () => {
     MOCK_POIS = [
+      poi("water", 80, "Marina Reservoir"), // positive sev 3 (+1.8)
+      poi("park", 150),
       poi("park", 250),
       poi("park", 350),
-      poi("park", 450), // 3 parks → positive sev 2 (+1.2)
-      poi("mrt_station", 400, "Bishan"), // positive sev 1 (+0.6)
+      poi("park", 450), // 4 parks → positive sev 3 (+1.8)
+      poi("mrt_station", 400, "Bayfront"), // positive sev 1 (+0.6)
       poi("school", 450), // positive sev 1 (+0.6)
     ];
     const r = analyzeFormSchool(BASE);
-    // raw 5 + 1.2 + 0.6 + 0.6 = 7.4 (not clamped) — verify it is exactly that.
-    expect(r.score).toBe(7.4);
-    expect(r.summary).toEqual({ positives: 3, negatives: 0 });
+    // 5 + 1.8 + 1.8 + 0.6 + 0.6 = 9.8 — a usable "excellent" ceiling (water
+    // lifted the old 7.4 cap), and the Math.min(10,…) guard still holds.
+    expect(r.score).toBe(9.8);
+    expect(r.score).toBeLessThanOrEqual(10);
+    expect(r.summary).toEqual({ positives: 4, negatives: 0 });
   });
 });

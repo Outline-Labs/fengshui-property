@@ -96,11 +96,35 @@ export function analyzeFormSchool(property: Coords): FormSchoolAnalysis {
   if (parks.length > 0 && (parks.length >= 2 || parks[0].distanceMeters <= 200)) {
     factors.push({
       type: "positive",
-      severity: parks.length >= 3 ? 2 : 1,
+      // Abundant greenery (4+) is strong yang qi; 3 is good; a single close /
+      // a couple within range is a modest plus.
+      severity: parks.length >= 4 ? 3 : parks.length >= 3 ? 2 : 1,
       category: "park",
       title: `${parks.length} green space${parks.length > 1 ? "s" : ""} within 500m`,
       description: `Greenery generates yang qi and oxygenates the local environment. Nearest: ${parks[0].name} at ${Math.round(parks[0].distanceMeters)}m.`,
       distanceMeters: parks[0].distanceMeters,
+    });
+  }
+
+  // Water governs wealth in classical form school — "山管人丁，水管财" — and qi
+  // gathers and settles at the water's edge. Proximity to open water
+  // (reservoir, river, canal, sea) is the strongest environmental positive,
+  // so it carries the full severity range (waterfront = 3).
+  const water = getNearestPOI(property, ["water"]);
+  if (water && water.distanceMeters <= 500) {
+    const severity = water.distanceMeters <= 100 ? 3 : water.distanceMeters <= 300 ? 2 : 1;
+    const named = water.name && water.name !== "(unnamed)" ? water.name : "Open water";
+    factors.push({
+      type: "positive",
+      severity,
+      category: "water",
+      title:
+        severity === 3
+          ? `Water frontage (${Math.round(water.distanceMeters)}m)`
+          : `Water within ${water.distanceMeters <= 300 ? "300m" : "500m"}`,
+      description: `${named} at ${Math.round(water.distanceMeters)}m. Water governs wealth (水主财); qi gathers at its edge — a favourable, prosperous influence.`,
+      distanceMeters: water.distanceMeters,
+      reference: water.id,
     });
   }
 
