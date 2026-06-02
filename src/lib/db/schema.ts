@@ -1,4 +1,5 @@
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { check, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 export const leads = sqliteTable("leads", {
   id: text("id").primaryKey(),
@@ -40,6 +41,30 @@ export const agents = sqliteTable("agents", {
   territories: text("territories"),
   status: text("status").notNull(), // pending | approved | suspended
   referredBy: text("referred_by"),
+  // Pre-funded wallet balance (cents). The fast atomic gate for claims; the
+  // append-only wallet_transactions ledger is the source of truth. Only ever
+  // mutated atomically alongside a ledger row via db.batch (see lib/wallet.ts).
+  balanceCents: integer("balance_cents").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+}, (t) => [
+  // Load-bearing: an unconditional debit (balance - price) violates this when
+  // funds are short, which aborts the claim's db.batch and rolls it back. This
+  // is the money guard — keep it in sync with the raw DDL in db/index.ts.
+  check("agents_balance_non_negative", sql`${t.balanceCents} >= 0`),
+]);
+
+// Append-only wallet ledger: top-ups (+), claim debits (−), and refunds.
+// `ref` is the idempotency key — the Stripe Checkout Session id for top-ups
+// (so a redelivered webhook credits once) and the claim id for debits (so a
+// retried claim can't double-charge). `balanceAfter` snapshots the cached
+// balance for independent reconciliation against agents.balance_cents.
+export const walletTransactions = sqliteTable("wallet_transactions", {
+  id: text("id").primaryKey(),
+  agentId: text("agent_id").notNull(),
+  amountCents: integer("amount_cents").notNull(), // +credit / −debit
+  kind: text("kind").notNull(), // topup | claim_debit | refund
+  ref: text("ref").notNull().unique(),
+  balanceAfter: integer("balance_after").notNull(),
   createdAt: integer("created_at").notNull(),
 });
 
@@ -55,3 +80,4 @@ export const claims = sqliteTable("claims", {
 export type Lead = typeof leads.$inferSelect;
 export type Agent = typeof agents.$inferSelect;
 export type Claim = typeof claims.$inferSelect;
+export type WalletTransaction = typeof walletTransactions.$inferSelect;
