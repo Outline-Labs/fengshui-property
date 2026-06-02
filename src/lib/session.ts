@@ -28,8 +28,16 @@ function unsign(signed: string): string | null {
     .createHmac("sha256", secret())
     .update(value)
     .digest("base64url");
-  if (sig.length !== expected.length) return null;
-  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+  const sigBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expected);
+  // Compare BYTE lengths, not string lengths: a forged signature with the same
+  // char count but a different UTF-8 byte length (e.g. multibyte chars) would
+  // otherwise reach timingSafeEqual, which throws RangeError on unequal byte
+  // lengths and crashes the request (callers don't catch). A wrong-length
+  // signature is trivially invalid, so returning null here is also constant-time
+  // w.r.t. the secret.
+  if (sigBuf.length !== expectedBuf.length) return null;
+  if (!crypto.timingSafeEqual(sigBuf, expectedBuf)) {
     return null;
   }
   return value;
