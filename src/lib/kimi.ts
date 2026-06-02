@@ -147,6 +147,140 @@ function normRec(v: unknown): FloorPlanRecommendation | null {
   return { title, detail: asString(r.detail) };
 }
 
+// ---------------------------------------------------------------------------
+// EXTRACTOR (Layer C input) — digitise a floor plan into geometry the
+// deterministic engine (lib/fengshui/spatial.ts) consumes. This does NO
+// fengshui judgment: it only locates rooms/features. Coordinates are normalised
+// [0,1] in IMAGE space (origin top-left, x→right, y→down); an adapter flips y
+// and applies the unit's orientation before handing to spatial.ts. Kept
+// separate from analyzeFloorPlanImage so the existing consumer reading is
+// unchanged — judgment moves to the engine only once Layer C rules are confirmed.
+
+const EXTRACT_PROMPT = `You are a precise floor-plan digitiser, NOT a fengshui consultant. Do not interpret, score, or advise — only locate things.
+
+Given a residential floor-plan image, return the pixel-normalised locations (each coordinate in [0,1], origin at the TOP-LEFT, x increases right, y increases down) of:
+- the outer wall boundary as a polygon (ordered points)
+- each room: a human label (bedroom/master bedroom/kitchen/bathroom/living/dining/balcony/store/utility) and its approximate centroid
+- the main entrance door
+- the stove / hob (if a kitchen is shown)
+- beds (one point each)
+- toilets / WCs (one point each)
+- windows and balconies (openings, 开口)
+- a north arrow or compass, if one is drawn: give the bearing its arrow points to in IMAGE space (degrees clockwise from straight-up)
+
+Return ONLY a valid JSON object (no markdown, no commentary) with EXACTLY this shape:
+{
+  "boundary": [ { "x": number, "y": number } ],
+  "rooms": [ { "label": string, "x": number, "y": number } ],
+  "door": { "x": number, "y": number } | null,
+  "stove": { "x": number, "y": number } | null,
+  "beds": [ { "x": number, "y": number } ],
+  "toilets": [ { "x": number, "y": number } ],
+  "openings": [ { "x": number, "y": number } ],
+  "northImageDeg": number | null,
+  "confidence": "high" | "medium" | "low",
+  "notes": string
+}
+Omit what you genuinely cannot see (empty array / null) — NEVER invent a room, door, or feature that is not visible. Put any caveats (illegible labels, no compass shown, ambiguous door) in notes and lower confidence.`;
+
+export type XY = { x: number; y: number };
+export type ExtractedRoom = { label: string; x: number; y: number };
+export type FloorPlanExtraction = {
+  boundary: XY[];
+  rooms: ExtractedRoom[];
+  door: XY | null;
+  stove: XY | null;
+  beds: XY[];
+  toilets: XY[];
+  openings: XY[];
+  northImageDeg: number | null;
+  confidence: "high" | "medium" | "low";
+  notes: string;
+};
+
+export async function extractFloorPlanFeatures(params: {
+  imageDataUrl: string;
+}): Promise<FloorPlanExtraction> {
+  const key = process.env.MOONSHOT_API_KEY;
+  if (!key) throw new Error("MOONSHOT_API_KEY is not configured");
+
+  const res = await fetch(`${KIMI_BASE}/chat/completions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: KIMI_MODEL,
+      temperature: 0, // digitisation should be as deterministic as the model allows
+      messages: [
+        { role: "system", content: EXTRACT_PROMPT },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Digitise this floor plan into the JSON specified." },
+            { type: "image_url", image_url: { url: params.imageDataUrl } },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Kimi ${res.status}: ${body.slice(0, 200)}`);
+  }
+  const data = (await res.json()) as KimiResponse;
+  if (data.error?.message) throw new Error(data.error.message);
+  return parseExtraction(data.choices?.[0]?.message?.content ?? "");
+}
+
+function xy(v: unknown): XY | null {
+  if (typeof v !== "object" || v === null) return null;
+  const r = v as Record<string, unknown>;
+  const x = Number(r.x);
+  const y = Number(r.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x, y };
+}
+
+function xyList(v: unknown): XY[] {
+  return Array.isArray(v) ? v.map(xy).filter((p): p is XY => p !== null) : [];
+}
+
+function parseExtraction(content: string): FloorPlanExtraction {
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(extractJson(content)) as Record<string, unknown>;
+  } catch {
+    throw new Error(
+      "Couldn't read the floor plan — try a clearer, higher-resolution image.",
+    );
+  }
+  const rooms = (Array.isArray(raw.rooms) ? raw.rooms : [])
+    .map((v): ExtractedRoom | null => {
+      const p = xy(v);
+      const label = asString((v as Record<string, unknown>)?.label);
+      return p && label ? { label, x: p.x, y: p.y } : null;
+    })
+    .filter((r): r is ExtractedRoom => r !== null);
+
+  const north = Number(raw.northImageDeg);
+  const conf = raw.confidence;
+  return {
+    boundary: xyList(raw.boundary),
+    rooms,
+    door: xy(raw.door),
+    stove: xy(raw.stove),
+    beds: xyList(raw.beds),
+    toilets: xyList(raw.toilets),
+    openings: xyList(raw.openings),
+    northImageDeg: Number.isFinite(north) ? north : null,
+    confidence: conf === "high" || conf === "low" ? conf : "medium",
+    notes: asString(raw.notes),
+  };
+}
+
 function parseAnalysis(content: string, facing: string): FloorPlanAnalysis {
   let raw: Record<string, unknown>;
   try {
