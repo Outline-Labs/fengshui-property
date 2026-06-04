@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { buildChart } from "./dagua";
+import { buildChart, guaYun } from "./dagua";
+import { hexagramForBearing } from "./bearing";
 import {
   type FloorPlan,
+  PENDING_RULES,
   assembleReading,
   branchSectorForBearing,
   centroid,
@@ -102,11 +104,41 @@ describe("assembleReading — deterministic overlay, gated verdicts", () => {
     expect(r.mingTang.room?.label).toBe("living");
   });
 
-  it("returns 旺衰 / 财位 verdicts as PENDING — never a fabricated judgment", () => {
-    expect(r.gated.wealthPosition.status).toBe("pending");
-    for (const v of Object.values(r.gated.wangShuaiBySector)) {
-      expect(v.status).toBe("pending");
-      expect(v.question.length).toBeGreaterThan(0);
+  it("attaches an INFERRED 旺/衰 verdict per room (當令為旺, Period 9)", () => {
+    for (const room of r.rooms) {
+      expect(["旺", "衰"]).toContain(room.wangShuai.status);
+      expect(room.wangShuai.inferred).toBe(true);
+      // 旺 ⟺ the sector hexagram's 卦運 == the period.
+      expect(room.wangShuai.status === "旺").toBe(room.wangShuai.guaYun === 9);
     }
+    // living(N→复 運9) and bedroom(E→临 運9) are 旺/正神/wants 山;
+    // kitchen(W→遁 運1) is 衰/零神/wants 水 (the 财 direction).
+    const liv = r.rooms.find((x) => x.room.label === "living")!;
+    const kit = r.rooms.find((x) => x.room.label === "kitchen")!;
+    expect(liv.wangShuai.status).toBe("旺");
+    expect(liv.wangShuai.role).toBe("正神");
+    expect(liv.wangShuai.wants).toBe("山");
+    expect(kit.wangShuai.status).toBe("衰");
+    expect(kit.wangShuai.role).toBe("零神");
+    expect(kit.wangShuai.wants).toBe("水");
+  });
+
+  it("derives 财位 = the 零神 (運1) directions, and placement verdicts", () => {
+    expect(r.wealth.bearings.length).toBe(8); // 運1 appears 8× around the ring
+    // every 财位 bearing's ring hexagram is 運1 (零神)
+    for (const b of r.wealth.bearings) {
+      expect(guaYun(hexagramForBearing(b))).toBe(1);
+    }
+    // a door in a 旺 sector (N→复 運9) is favourable
+    const door = r.placements.find((p) => p.feature === "door")!;
+    expect(door.favorable).toBe(true);
+    expect(r.inferred).toBe(true);
+  });
+
+  it("PENDING_RULES opt-out withholds every verdict", () => {
+    const p = assembleReading(chart, plan, 9, PENDING_RULES);
+    for (const room of p.rooms) expect(room.wangShuai.status).toBe("pending");
+    expect(p.wealth.bearings).toEqual([]);
+    expect(p.inferred).toBe(false);
   });
 });

@@ -87,11 +87,13 @@ export type HexSourceMeta = {
 /**
  * Per-hexagram source metadata transcribed from table B.
  *
- * ⚠️ guaYun is ~94% verified: the 合十 law (错卦 pairs sum to 10) flags two
- * pairs as misread — 火泽睽/水山蹇 (read 7+7) and 天泽履/地山谦 (read 1+6) — so
- * four guaYun values are UNTRUSTWORTHY. Do not drive 旺/衰 off guaYun until a
- * cleaner read or the practitioner confirms the values. indexTop/indexBottom
- * meaning is still undecoded.
+ * The numbers have since been DECODED into a rule (see dagua.ts guaYun /
+ * indexCode): indexTop = XT_LS[upper]·10 + XT_LS[lower] (verified 64/64), and
+ * 卦運 = 10 − XT_LS[upper]. The rule reproduced 62/64 of the transcribed 卦運 and
+ * exposed the 2 OCR errors the 合十 law flagged — now CORRECTED below (地山谦
+ * 6→9, 水山蹇 7→3). `dagua.guaYun()` is the canonical (rule-derived) value;
+ * this table is the raw record. indexBottom remains a noisy, undecoded
+ * secondary coordinate (kept verbatim, unused).
  */
 export const HEX_SOURCE: Readonly<Record<string, HexSourceMeta>> = {
   "风天小畜": { indexTop: 29, indexBottom: 84, guaYun: 8 },
@@ -130,9 +132,9 @@ export const HEX_SOURCE: Readonly<Record<string, HexSourceMeta>> = {
   "火地晋": { indexTop: 31, indexBottom: 36, guaYun: 7 },
   "泽地萃": { indexTop: 41, indexBottom: 47, guaYun: 6 },
   "天地否": { indexTop: 91, indexBottom: 96, guaYun: 1 },
-  "地山谦": { indexTop: 16, indexBottom: 67, guaYun: 6 },
+  "地山谦": { indexTop: 16, indexBottom: 67, guaYun: 9 }, // 卦運 OCR-corrected 6→9 (rule)
   "艮为山": { indexTop: 66, indexBottom: 18, guaYun: 4 },
-  "水山蹇": { indexTop: 76, indexBottom: 27, guaYun: 7 },
+  "水山蹇": { indexTop: 76, indexBottom: 27, guaYun: 3 }, // 卦運 OCR-corrected 7→3 (rule)
   "风山渐": { indexTop: 26, indexBottom: 78, guaYun: 8 },
   "雷山小过": { indexTop: 86, indexBottom: 37, guaYun: 2 },
   "火山旅": { indexTop: 36, indexBottom: 89, guaYun: 7 },
@@ -161,4 +163,6 @@ export const HEX_SOURCE: Readonly<Record<string, HexSourceMeta>> = {
 };
 
 /** Hexagrams whose transcribed 卦運 failed the 合十 cross-check (suspect). */
-export const SUSPECT_GUAYUN: readonly string[] = ["火泽睽","水山蹇","天泽履","地山谦"];
+// Resolved: 火泽睽(7)/天泽履(1) were correct; 水山蹇 and 地山谦 were the misreads,
+// now corrected via the 卦運 rule. Empty = no outstanding suspects.
+export const SUSPECT_GUAYUN: readonly string[] = [];

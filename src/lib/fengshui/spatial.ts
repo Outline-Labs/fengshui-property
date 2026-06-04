@@ -1,21 +1,31 @@
-// LAYER C — spatial overlay scaffold.
+// LAYER C — spatial overlay.
 //
-// This module does the DETERMINISTIC, method-agnostic geometry only:
+// Deterministic geometry (method-agnostic):
 //   - 中宫 (centroid) of the unit
-//   - each room/feature → its compass sector (12-branch directions, matching the
-//     Da Gua chart's per-line directions) so rooms can be tied to chart lines
+//   - each room/feature → its compass sector (12-branch), tied to chart lines
 //   - 青龙/白虎 flanks (split by the centre→door axis)
 //   - 明堂 (the entry space the door opens into)
 //
-// It deliberately does NOT judge. Per the research, the lineage's 旺/衰, 财位,
-// and door/stove/bed/toilet rules are BLOCKED (旺衰 needs each hexagram's 卦運,
-// hidden in the un-decoded index pair; 财位/placement have no native Xuan Kong
-// Da Gua rule — XKDG is classically date-selection). Every such judgment goes
-// through the swappable `LineageRules` strategy, whose default returns
-// "pending practitioner confirmation" and the exact question to ask — never a
-// fabricated verdict to a real user.
+// Judgment is now produced by INFERRED_RULES — the rules we decoded from the
+// master's charts (卦運 via the XT_LS rule in dagua.ts) and reasoned from
+// classical doctrine. They are tagged `inferred: true` because the practitioner
+// has NOT yet confirmed them. The Da Gua engine is not wired to any consumer
+// route, so these don't reach users. PENDING_RULES (no verdict, just the
+// question to ask) remains available as the conservative opt-out.
+//
+// Inferred rules (pending master confirmation):
+//   - 旺/衰: a sector is 旺 when its ring hexagram's 卦運 == the current 運
+//     (當令為旺); 失令為衰. The 合十 complement 運 (運1 in Period 9) is the 零神.
+//   - 山/水 requirement: 正神 (旺) wants 山 (山管人丁); 零神 wants 水 (水管财).
+//   - 财位: the 零神 directions (the water/wealth positions).
+//   - placement: door/stove/bed favour 旺 sectors; toilets favour 衰 (drain
+//     decline, never flush a 旺 sector).
+// CAVEAT: the worked example's hand-marked 山/水 read as OBSERVED landform and do
+// not cleanly track this 旺衰 mapping, so the 山/水 *requirement* especially needs
+// the master's confirmation.
 
-import type { DaguaChart, ChartLine } from "./dagua";
+import { type DaguaChart, type ChartLine, guaYun } from "./dagua";
+import { hexagramForBearing } from "./bearing";
 
 // Floorplan coordinate frame: points are (x, y); +x points to compass
 // `xAxisBearingDeg`, and +y is 90° counter-clockwise from +x (i.e. with the
@@ -128,74 +138,116 @@ export type RoomPlacement = {
 };
 
 // ---------------------------------------------------------------------------
-// Gated lineage rules — the judgment layer. Default returns "pending"; a
-// confirmed implementation can be slotted in later without touching the geometry.
+// The judgment layer (swappable strategy).
 // ---------------------------------------------------------------------------
-export type Gated = {
-  status: "pending";
-  reason: string;
-  question: string; // the exact question to put to the practitioner
+export type SectorVerdict = {
+  /** 旺 (prosperous, 當令) / 衰 (declining, 失令) / pending (no verdict). */
+  status: "旺" | "衰" | "pending";
+  hexagram?: string;
+  guaYun?: number;
+  role?: "正神" | "零神" | "退氣";
+  /** What classical doctrine says the sector should hold: 山 (人丁) / 水 (财). */
+  wants?: "山" | "水" | null;
+  /** true when produced by our decoded rule (pending master confirmation). */
+  inferred?: boolean;
+  note: string;
+};
+
+export type Placement = {
+  feature: "door" | "stove" | "bed" | "toilet";
+  favorable: boolean | null; // null = pending
+  note: string;
 };
 
 export interface LineageRules {
-  /** 旺/衰 status of a sector given the chart + period. */
-  sectorWangShuai(sector: SectorLabel, chart: DaguaChart, period: number): Gated;
-  /** 财位 (wealth position) from the facing hexagram + period. */
-  wealthPosition(facing: DaguaChart | null, period: number): Gated;
-  /** Placement judgment for a feature (door/stove/bed/toilet) in its sector. */
-  placement(feature: "door" | "stove" | "bed" | "toilet", sector: SectorLabel): Gated;
+  sectorWangShuai(bearingDeg: number, period: number): SectorVerdict;
+  /** Bearings (slice centres) of the 财位 — the 零神/water-wealth directions. */
+  wealthBearings(period: number): { bearings: number[]; note: string };
+  placement(feature: Placement["feature"], verdict: SectorVerdict): Placement;
 }
 
+/** Conservative opt-out: emit no verdict, only the question to ask the master. */
 export const PENDING_RULES: LineageRules = {
   sectorWangShuai: () => ({
     status: "pending",
-    reason:
-      "旺/衰 needs each hexagram's 卦運, which is not yet decoded (likely hidden in the 29/84-style index pair).",
-    question:
-      "What is each hexagram's 卦運 (period number 1–9), and how is it read from the luopan? Under Period 9, is the sitting/facing sector 旺 or 衰?",
+    note: "旺/衰 verdict withheld — pending practitioner confirmation of the rule.",
   }),
-  wealthPosition: () => ({
-    status: "pending",
-    reason:
-      "Xuan Kong Da Gua has no native 财位 rule (it is classically date-selection); the worked example marks only 山/水, never a 财位.",
-    question:
-      "Does your method produce a 财位? If so, from which inputs (facing hexagram + period, occupant Kua, or door position)?",
-  }),
-  placement: () => ({
-    status: "pending",
-    reason:
-      "No native XKDG door/stove/bed/toilet rule was found; placement rules belong to other systems (八宅 / 飞星 / 峦头).",
-    question:
-      "How did you decide 山 vs 水 for each side of the unit — by the sitting hexagram's line elements, by landform, or by each sector's 旺/衰?",
-  }),
+  wealthBearings: () => ({ bearings: [], note: "财位 pending practitioner confirmation." }),
+  placement: (feature) => ({ feature, favorable: null, note: "Placement pending confirmation." }),
+};
+
+/**
+ * INFERRED rules (decoded + reasoned, NOT master-confirmed). 旺 when the
+ * sector's ring hexagram 卦運 == current 運; 山 for 正神 / 水 for 零神; 财位 =
+ * the 零神 directions; placement favours 旺 (toilets favour 衰).
+ */
+export const INFERRED_RULES: LineageRules = {
+  sectorWangShuai(bearingDeg, period) {
+    const hexagram = hexagramForBearing(bearingDeg);
+    const y = guaYun(hexagram);
+    const zeroShen = 10 - period; // 合十 complement (Period 9 → 零神 運1)
+    const status = y === period ? "旺" : "衰";
+    const role = y === period ? "正神" : y === zeroShen ? "零神" : "退氣";
+    const wants = role === "正神" ? "山" : role === "零神" ? "水" : null;
+    return {
+      status,
+      hexagram,
+      guaYun: y,
+      role,
+      wants,
+      inferred: true,
+      note: `${hexagram} 卦運${y} · 運${period}: ${role} → ${status}${wants ? ` (wants ${wants})` : ""}`,
+    };
+  },
+  wealthBearings(period) {
+    const zeroShen = 10 - period;
+    const bearings: number[] = [];
+    for (let k = 0; k < 64; k++) {
+      const deg = k * (360 / 64);
+      if (guaYun(hexagramForBearing(deg)) === zeroShen) bearings.push(deg);
+    }
+    return { bearings, note: `财位 = 零神 (運${zeroShen}) directions — water governs wealth. INFERRED.` };
+  },
+  placement(feature, verdict) {
+    if (verdict.status === "pending") return { feature, favorable: null, note: "pending" };
+    const wang = verdict.status === "旺";
+    // Toilets drain their sector: good in 衰, bad in 旺 (flushes prosperity).
+    const favorable = feature === "toilet" ? !wang : wang;
+    const why =
+      feature === "toilet"
+        ? wang ? "a toilet in a 旺 sector flushes prosperity" : "a toilet in a 衰 sector drains decline (good)"
+        : wang ? `a ${feature} in a 旺 sector draws prosperous qi` : `a ${feature} in a 衰 sector sits on declining qi`;
+    return { feature, favorable, note: `${why}. INFERRED.` };
+  },
 };
 
 export type SpatialReading = {
   center: PlanPoint;
-  rooms: RoomPlacement[];
-  flankSummary: { 青龙: string[]; 白虎: string[]; axis: string[] }; // room labels by flank
-  mingTang: { room: Room | null; note: string }; // entry space the door opens into
-  gated: {
-    wangShuaiBySector: Record<string, Gated>;
-    wealthPosition: Gated;
-  };
+  rooms: (RoomPlacement & { wangShuai: SectorVerdict })[];
+  flankSummary: { 青龙: string[]; 白虎: string[]; axis: string[] };
+  mingTang: { room: Room | null; note: string };
+  /** Per-feature placement verdicts (only for features present in the plan). */
+  placements: Placement[];
+  wealth: { bearings: number[]; note: string };
+  /** Whether the judgments are inferred (pending master) vs withheld. */
+  inferred: boolean;
 };
 
 /**
- * Overlay the (verified) Da Gua chart onto a floorplan. Produces the
- * deterministic facts (sectors, flanks, 明堂, chart-line ties) plus GATED
- * judgments. `rules` defaults to PENDING_RULES so nothing fabricated ships.
+ * Overlay the (verified) Da Gua chart onto a floorplan: deterministic geometry
+ * (sectors, flanks, 明堂, chart-line ties) plus the rule layer's verdicts.
+ * Defaults to INFERRED_RULES (tagged inferred); pass PENDING_RULES to withhold.
  */
 export function assembleReading(
   chart: DaguaChart,
   plan: FloorPlan,
   period = 9,
-  rules: LineageRules = PENDING_RULES,
+  rules: LineageRules = INFERRED_RULES,
 ): SpatialReading {
   const xAxis = plan.xAxisBearingDeg ?? 90;
   const center = centroid(plan.boundary);
 
-  const rooms: RoomPlacement[] = plan.rooms.map((room) => {
+  const rooms = plan.rooms.map((room) => {
     const bearingDeg = compassBearing(center, room.center, xAxis);
     const sector = branchSectorForBearing(bearingDeg);
     return {
@@ -204,6 +256,7 @@ export function assembleReading(
       sector,
       flank: flankOf(center, plan.door, room.center),
       chartLines: chart.lines.filter((l) => l.direction === sector),
+      wangShuai: rules.sectorWangShuai(bearingDeg, period),
     };
   });
 
@@ -221,9 +274,17 @@ export function assembleReading(
     }
   }
 
-  const sectors = Array.from(new Set(rooms.map((r) => r.sector)));
-  const wangShuaiBySector: Record<string, Gated> = {};
-  for (const s of sectors) wangShuaiBySector[s] = rules.sectorWangShuai(s, chart, period);
+  // Placement verdicts for the physical features present in the plan.
+  const placements: Placement[] = [];
+  const f = plan.features;
+  if (f) {
+    const verdictAt = (p: PlanPoint) =>
+      rules.sectorWangShuai(compassBearing(center, p, xAxis), period);
+    if (f.stove) placements.push(rules.placement("stove", verdictAt(f.stove)));
+    for (const bed of f.beds ?? []) placements.push(rules.placement("bed", verdictAt(bed)));
+    for (const wc of f.toilets ?? []) placements.push(rules.placement("toilet", verdictAt(wc)));
+  }
+  placements.push(rules.placement("door", rules.sectorWangShuai(compassBearing(center, plan.door, xAxis), period)));
 
   return {
     center,
@@ -234,9 +295,8 @@ export function assembleReading(
       note:
         "明堂 = the entry space the door opens into; favourable when open/bright. Quantitative sizing (e.g. ~1.5× width) is an unconfirmed heuristic, not a canonical threshold.",
     },
-    gated: {
-      wangShuaiBySector,
-      wealthPosition: rules.wealthPosition(null, period),
-    },
+    placements,
+    wealth: rules.wealthBearings(period),
+    inferred: rules === INFERRED_RULES,
   };
 }
