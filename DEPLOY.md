@@ -12,6 +12,12 @@ One Vercel project serves **both** surfaces; the host header decides which
 > raw `*.vercel.app` URL it 404s (treated as the consumer host), so you can't
 > smoke-test the dashboard until that subdomain's DNS points at Vercel.
 
+> ⚠️ **First production release is CONSUMER-ONLY.** The agent surface is OFF in
+> production by default — every `/p/*` path 404s and the partner host isn't
+> routed (`partnersEnabled()` in `src/proxy.ts`). The partner code still ships,
+> dormant. Turn it on for a deploy with `PARTNERS_ENABLED=true`. It stays ON
+> locally and in tests so the team keeps building it.
+
 ---
 
 ## Environment variables
@@ -33,6 +39,7 @@ Set these in **Vercel → Project → Settings → Environment Variables** (Prod
 | `EMAIL_FROM` | Launch | e.g. `Fengshui AI <noreply@fengshuiai.sg>` (verified Resend domain) |
 | `STRIPE_SECRET_KEY` | Launch | Stripe Dashboard (test mode `sk_test_…` pre-launch). Absent ⇒ dev credits top-ups instantly; **prod fails closed** (no top-ups). |
 | `STRIPE_WEBHOOK_SECRET` | Launch | `whsec_…` from `stripe listen` or the Dashboard webhook endpoint — verifies events at `/api/stripe/webhook`. |
+| `PARTNERS_ENABLED` | No | Agent-surface kill switch. **Leave UNSET in production** (consumer-only v1 → surface off). Set `true` to enable the dashboard on a deploy. |
 | `ONEMAP_TOKEN` | No | Static-token fallback; only used if email/password are unset |
 | `DATA_GOV_SG_API_KEY`, `LTA_ACCOUNT_KEY` | No | Offline `pnpm data:pois` only — POIs are baked into `data/pois.json` |
 

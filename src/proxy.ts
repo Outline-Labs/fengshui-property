@@ -8,9 +8,38 @@ function isPartnerPath(path: string): boolean {
   return path === "/p" || path.startsWith("/p/");
 }
 
+/**
+ * Whether the agent (partner) surface is live.
+ *
+ * OFF for the consumer-only first production release: in production the agent
+ * dashboard is unreachable — every /p path 404s and the partner host gets no
+ * special routing (it just serves the consumer site). Defaults ON outside
+ * production so the team keeps building it locally and in tests.
+ * `PARTNERS_ENABLED=true|false` overrides either way (e.g. to turn it on for a
+ * staging deploy, or to rehearse the consumer-only posture locally).
+ */
+function partnersEnabled(): boolean {
+  const v = process.env.PARTNERS_ENABLED;
+  if (v === "true" || v === "1") return true;
+  if (v === "false" || v === "0") return false;
+  return process.env.NODE_ENV !== "production";
+}
+
 export function proxy(request: NextRequest) {
-  const host = request.headers.get("host") ?? "";
   const path = request.nextUrl.pathname;
+
+  // Kill switch (consumer-only launch): with the partner surface off, the agent
+  // dashboard is unreachable everywhere — /p 404s and the partner host is not
+  // routed (it falls through to the consumer site). Re-enable with
+  // PARTNERS_ENABLED=true.
+  if (!partnersEnabled()) {
+    if (isPartnerPath(path)) {
+      return new NextResponse(null, { status: 404 });
+    }
+    return NextResponse.next();
+  }
+
+  const host = request.headers.get("host") ?? "";
   const partner = isPartnerHost(host);
 
   // The agent surface lives only on the partner host. Block any /p access from
