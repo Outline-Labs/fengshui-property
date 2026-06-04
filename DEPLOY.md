@@ -31,12 +31,15 @@ Set these in **Vercel → Project → Settings → Environment Variables** (Prod
 | `TWILIO_VERIFY_SERVICE_SID` | Launch | Twilio Verify Service SID (`VA…`) — create a Verify Service in the Console |
 | `RESEND_API_KEY` | Launch | resend.com |
 | `EMAIL_FROM` | Launch | e.g. `Fengshui AI <noreply@fengshuiai.sg>` (verified Resend domain) |
+| `STRIPE_SECRET_KEY` | Launch | Stripe Dashboard (test mode `sk_test_…` pre-launch). Absent ⇒ dev credits top-ups instantly; **prod fails closed** (no top-ups). |
+| `STRIPE_WEBHOOK_SECRET` | Launch | `whsec_…` from `stripe listen` or the Dashboard webhook endpoint — verifies events at `/api/stripe/webhook`. |
 | `ONEMAP_TOKEN` | No | Static-token fallback; only used if email/password are unset |
 | `DATA_GOV_SG_API_KEY`, `LTA_ACCOUNT_KEY` | No | Offline `pnpm data:pois` only — POIs are baked into `data/pois.json` |
 
 **Required = the build/app won't work without it.** **Launch = the app boots
 (dev-style logging) but the business can't run:** no Twilio ⇒ no OTP SMS ⇒ no
-verifiable/sellable leads; no Resend ⇒ agents can't receive sign-in links.
+verifiable/sellable leads; no Resend ⇒ agents can't receive sign-in links; no
+Stripe ⇒ agents can't fund their wallet ⇒ can't claim leads (no revenue).
 
 ---
 
@@ -85,11 +88,21 @@ you prefer a CNAME over the A record.)
 - [ ] `https://fengshuiai.sg/p/dashboard` → 404.
 - [ ] `https://partners.fengshuiai.sg/login` → enter an approved agent's email → **magic-link email arrives** → link signs in → `/dashboard`.
 - [ ] `curl -sI https://partners.fengshuiai.sg/ | grep -i x-robots-tag` → `noindex, nofollow`.
-- [ ] A newly OTP-verified lead appears in the dashboard's available leads; claiming it works.
+- [ ] Partner dashboard: top up the wallet (Stripe test card `4242 4242 4242 4242`) → balance rises; a newly OTP-verified lead appears in available leads, and claiming it debits S$88 and reveals contact.
+
+### 6 — Stripe webhook (billing)
+Top-ups are credited by the webhook, not the browser redirect — so this must be
+wired up or balances never move. In **Stripe → Developers → Webhooks**, add an
+endpoint `https://<host>/api/stripe/webhook` (the live domain at launch; the
+`*.vercel.app` host also works for test mode, since `/api/*` bypasses the host
+proxy). Subscribe to **`checkout.session.completed`** and copy the endpoint's
+signing secret into `STRIPE_WEBHOOK_SECRET`. Locally:
+`stripe listen --forward-to localhost:3000/api/stripe/webhook` prints a dev
+`whsec_…`. Switch the `sk_test_…`/`whsec_…` pair to live keys before real traffic.
 
 ---
 
 ## Known gaps before real traffic
-- **Billing not built.** Claims record S$88 but no money moves. Planned model: agent wallet / pre-fund (Stripe). Webhooks need this public URL — do it right after the domains resolve.
+- **Billing live (test mode).** Agents pre-fund a wallet via Stripe Checkout; claiming a lead debits it atomically (`src/lib/wallet.ts` + `claimLead`), and the webhook (`/api/stripe/webhook`) credits top-ups idempotently. Before real traffic: switch to **live** Stripe keys and register the live webhook endpoint (step 6). Auto-reload (saved card) is deferred to v2; refunds/chargebacks are not yet handled.
 - **Legal pages are drafts.** `/privacy` `/terms` `/pdpa` need a SG lawyer + the real operating-entity name (brand "Fengshui AI" is a placeholder).
 - **SEO.** No `sitemap.xml`/`robots.txt` yet — add once the programmatic content pages exist (keep `partners.` out of the sitemap).

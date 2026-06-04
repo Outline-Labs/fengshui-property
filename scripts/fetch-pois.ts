@@ -15,6 +15,10 @@ area["ISO3166-1"="SG"][admin_level=2]->.sg;
   nwr["amenity"="grave_yard"](area.sg);
   nwr["landuse"="cemetery"](area.sg);
   nwr["leisure"="park"](area.sg);
+  nwr["natural"="water"](area.sg);
+  nwr["water"="reservoir"](area.sg);
+  way["waterway"="river"](area.sg);
+  way["waterway"="canal"](area.sg);
   nwr["amenity"="place_of_worship"](area.sg);
   nwr["amenity"="school"](area.sg);
   nwr["amenity"="police"](area.sg);
@@ -45,6 +49,13 @@ function categorize(
   if (tags.amenity === "grave_yard" || tags.landuse === "cemetery")
     return "cemetery";
   if (tags.leisure === "park") return "park";
+  if (
+    tags.natural === "water" ||
+    tags.water === "reservoir" ||
+    tags.waterway === "river" ||
+    tags.waterway === "canal"
+  )
+    return "water";
   if (tags.amenity === "place_of_worship") return "religious";
   if (tags.amenity === "school") return "school";
   if (tags.amenity === "police") return "police_station";
