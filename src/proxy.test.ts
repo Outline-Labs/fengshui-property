@@ -68,3 +68,49 @@ describe("proxy — consumer host in DEVELOPMENT", () => {
     expect(proxy(req(CONSUMER, "/p/dashboard")).status).not.toBe(404);
   });
 });
+
+// The consumer-only first release: the agent surface is OFF. Triggered by
+// production (the default posture) OR an explicit PARTNERS_ENABLED=false.
+describe("proxy — partner surface DISABLED (consumer-only launch)", () => {
+  describe.each([
+    ["production default", () => vi.stubEnv("NODE_ENV", "production")],
+    ["explicit PARTNERS_ENABLED=false", () => vi.stubEnv("PARTNERS_ENABLED", "false")],
+  ])("%s", (_label, setup) => {
+    beforeEach(setup);
+    afterEach(() => vi.unstubAllEnvs());
+
+    it("404s every /p path, on either host", () => {
+      expect(proxy(req(PARTNER, "/p/dashboard")).status).toBe(404);
+      expect(proxy(req(CONSUMER, "/p/dashboard")).status).toBe(404);
+      expect(proxy(req(PARTNER, "/p")).status).toBe(404);
+    });
+
+    it("does NOT route the partner host to /p (no rewrite, no noindex)", () => {
+      const res = proxy(req(PARTNER, "/dashboard"));
+      expect(rewriteTarget(res)).toBeNull();
+      expect(res.headers.get("x-robots-tag")).toBeNull();
+    });
+
+    it("still serves the consumer site normally", () => {
+      const res = proxy(req(CONSUMER, "/"));
+      expect(res.status).not.toBe(404);
+      expect(rewriteTarget(res)).toBeNull();
+    });
+  });
+});
+
+// Escape hatch: PARTNERS_ENABLED=true re-enables the surface even in production
+// (e.g. a staging deploy that needs the dashboard).
+describe("proxy — PARTNERS_ENABLED=true overrides production", () => {
+  beforeEach(() => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PARTNERS_ENABLED", "true");
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("routes the partner host even in production", () => {
+    const res = proxy(req(PARTNER, "/dashboard"));
+    expect(rewriteTarget(res)).toBe("/p/dashboard");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+  });
+});

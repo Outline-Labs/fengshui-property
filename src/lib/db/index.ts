@@ -80,9 +80,20 @@ export function ensureSchema(): Promise<void> {
           territories TEXT,
           status TEXT NOT NULL,
           referred_by TEXT,
+          balance_cents INTEGER NOT NULL DEFAULT 0 CHECK (balance_cents >= 0),
           created_at INTEGER NOT NULL
         )
       `);
+      // Idempotent column migration for pre-existing dev databases. The CHECK is
+      // the money guard: an unconditional debit that would overdraw violates it
+      // and rolls back the claim batch (see lib/wallet.ts, lib/agents.ts).
+      try {
+        await client.execute(
+          `ALTER TABLE agents ADD COLUMN balance_cents INTEGER NOT NULL DEFAULT 0 CHECK (balance_cents >= 0)`,
+        );
+      } catch {
+        // column already exists
+      }
       await client.execute(`
         CREATE TABLE IF NOT EXISTS claims (
           id TEXT PRIMARY KEY,
@@ -93,6 +104,23 @@ export function ensureSchema(): Promise<void> {
           claimed_at INTEGER NOT NULL
         )
       `);
+      // Append-only wallet ledger. UNIQUE(ref) is the idempotency key for
+      // Stripe webhook redelivery (ref = session id) and double-debit guard
+      // (ref = claim id).
+      await client.execute(`
+        CREATE TABLE IF NOT EXISTS wallet_transactions (
+          id TEXT PRIMARY KEY,
+          agent_id TEXT NOT NULL,
+          amount_cents INTEGER NOT NULL,
+          kind TEXT NOT NULL,
+          ref TEXT NOT NULL UNIQUE,
+          balance_after INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+      `);
+      await client.execute(
+        `CREATE INDEX IF NOT EXISTS idx_wallet_tx_agent ON wallet_transactions (agent_id, created_at)`,
+      );
     })();
   }
   return ready;

@@ -1,7 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { db, ensureSchema } from "./db";
 import {
@@ -11,7 +11,9 @@ import {
   analyses,
   claims,
   leads,
+  walletTransactions,
 } from "./db/schema";
+import { isCheckViolation, isUniqueViolation } from "./wallet";
 
 // One tier: a verified buyer inquiry (OTP-verified phone + asked for an agent).
 export const VERIFIED_PRICE_CENTS = 8800; // S$88
@@ -147,35 +149,89 @@ export async function listAvailableLeads(): Promise<MarketLead[]> {
   return out;
 }
 
+export type ClaimResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: "unavailable" | "taken" | "insufficient_funds";
+      error: string;
+    };
+
+/**
+ * Claim a lead for an agent: exclusive (FCFS) and paid, in one atomic step.
+ *
+ * Sellability is checked first and outside the money batch — an unverified or
+ * not-yet-requested lead can never be sold, so we report "unavailable" without
+ * touching the wallet. The claim + debit + ledger entry then run as one
+ * db.batch, where two constraints are the guards:
+ *   - CHECK(balance_cents >= 0): the unconditional debit overdraws and aborts
+ *     when the agent is short  → insufficient_funds.
+ *   - UNIQUE(claims.lead_id):   the insert aborts when another agent won first
+ *     → taken.
+ * Either abort rolls the whole batch back, so a broke or losing agent is never
+ * charged and no orphan claim/ledger row survives. (db.batch is used rather than
+ * an interactive transaction because the latter deadlocks on a single libsql
+ * connection under concurrent claims; batch serializes correctly.)
+ */
 export async function claimLead(
   agentId: string,
   leadId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<ClaimResult> {
   await ensureSchema();
   const lr = await db.select().from(leads).where(eq(leads.id, leadId)).limit(1);
   const lead = lr[0];
   if (!lead || lead.phoneVerified !== 1 || lead.wantsAgent !== 1) {
-    return { ok: false, error: "That lead is no longer available." };
+    return {
+      ok: false,
+      reason: "unavailable",
+      error: "That lead is no longer available.",
+    };
   }
-  const existing = await db
-    .select({ id: claims.id })
-    .from(claims)
-    .where(eq(claims.leadId, leadId))
-    .limit(1);
-  if (existing[0]) {
-    return { ok: false, error: "Another agent claimed this lead first." };
-  }
+
+  const claimId = crypto.randomUUID();
+  const now = Date.now();
   try {
-    await db.insert(claims).values({
-      id: crypto.randomUUID(),
-      leadId,
-      agentId,
-      tier: "verified",
-      priceCents: VERIFIED_PRICE_CENTS,
-      claimedAt: Date.now(),
-    });
-  } catch {
-    return { ok: false, error: "Another agent claimed this lead first." };
+    await db.batch([
+      db
+        .update(agents)
+        .set({
+          balanceCents: sql`${agents.balanceCents} - ${VERIFIED_PRICE_CENTS}`,
+        })
+        .where(eq(agents.id, agentId)),
+      db.insert(claims).values({
+        id: claimId,
+        leadId,
+        agentId,
+        tier: "verified",
+        priceCents: VERIFIED_PRICE_CENTS,
+        claimedAt: now,
+      }),
+      db.insert(walletTransactions).values({
+        id: crypto.randomUUID(),
+        agentId,
+        amountCents: -VERIFIED_PRICE_CENTS,
+        kind: "claim_debit",
+        ref: claimId,
+        balanceAfter: sql`(SELECT ${agents.balanceCents} FROM ${agents} WHERE ${agents.id} = ${agentId})`,
+        createdAt: now,
+      }),
+    ]);
+  } catch (e) {
+    if (isCheckViolation(e)) {
+      return {
+        ok: false,
+        reason: "insufficient_funds",
+        error: "Not enough wallet balance — top up to claim.",
+      };
+    }
+    if (isUniqueViolation(e)) {
+      return {
+        ok: false,
+        reason: "taken",
+        error: "Another agent claimed this lead first.",
+      };
+    }
+    throw e;
   }
   return { ok: true };
 }
