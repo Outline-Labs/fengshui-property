@@ -117,16 +117,23 @@ export async function reverseGeocode(
   const list = data.GeocodeInfo ?? [];
   if (list.length === 0) return null;
 
+  // OneMap returns the literal string "NIL" for missing fields; treat it (and
+  // blanks) as absent so it never leaks into a formatted address like
+  // "Blk NIL NIL · NIL · S069111".
+  const clean = (v?: string) => {
+    const t = (v ?? "").trim();
+    return t === "NIL" ? "" : t;
+  };
   const enriched = list
     .map((a) => {
       const lat = Number(a.LATITUDE);
       const lon = Number(a.LONGITUDE);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
       return {
-        buildingName: (a.BUILDINGNAME || "").trim(),
-        block: (a.BLOCK || "").trim(),
-        road: (a.ROAD || "").trim(),
-        postalCode: (a.POSTALCODE || "").trim(),
+        buildingName: clean(a.BUILDINGNAME),
+        block: clean(a.BLOCK),
+        road: clean(a.ROAD),
+        postalCode: clean(a.POSTALCODE),
         lat,
         lon,
         distanceMeters: haversine(coords, { lat, lon }),
