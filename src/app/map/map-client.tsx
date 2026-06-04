@@ -19,20 +19,19 @@ const SG_BOUNDS: [[number, number], [number, number]] = [
   [104.06, 1.48],
 ];
 
+// OneMap's "Default" colored basemap — Singapore Land Authority's official
+// detailed SG tiles (building footprints, local labels). Covers Singapore only,
+// which is fine: the map is already locked to SG_BOUNDS. Attribution per OneMap
+// terms (OneMap + SLA). The basemap tiles are public (no token needed).
 const BASEMAP_ATTRIBUTION =
-  '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>';
+  '<img src="https://www.onemap.gov.sg/web-assets/images/logo/om_logo.png" alt="OneMap" style="height:16px;width:16px;vertical-align:middle"/> <a href="https://www.onemap.gov.sg/" target="_blank" rel="noopener">OneMap</a> · © <a href="https://www.sla.gov.sg/" target="_blank" rel="noopener">Singapore Land Authority</a>';
 
 const BASEMAP_STYLE: StyleSpecification = {
   version: 8,
   sources: {
     basemap: {
       type: "raster",
-      tiles: [
-        "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-        "https://d.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-      ],
+      tiles: ["https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png"],
       tileSize: 256,
       attribution: BASEMAP_ATTRIBUTION,
       maxzoom: 19,
@@ -40,7 +39,7 @@ const BASEMAP_STYLE: StyleSpecification = {
   },
   layers: [
     {
-      id: "basemap-light",
+      id: "basemap-onemap",
       type: "raster",
       source: "basemap",
     },
