@@ -5,6 +5,8 @@ import {
   type SixGod,
   allHexagrams,
   buildChart,
+  guaYun,
+  indexCode,
   najiaLines,
   palaceOf,
   sixGods,
@@ -177,5 +179,57 @@ describe("unknown hexagram", () => {
   });
   it("palaceOf throws", () => {
     expect(() => palaceOf("nope")).toThrow(/Unknown hexagram/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 卦運 / index code (INFERRED rule, decoded from the luopan). The rule must
+// satisfy two classical invariants over all 64, which is how we trust it.
+// ---------------------------------------------------------------------------
+describe("guaYun / indexCode — decoded rule", () => {
+  it("matches the anchors (and the OCR-corrected values)", () => {
+    expect(guaYun("风天小畜")).toBe(8);
+    expect(indexCode("风天小畜")).toBe(29);
+    expect(guaYun("雷地豫")).toBe(2);
+    expect(indexCode("雷地豫")).toBe(81);
+    // The two the 合十 law flagged as misread — the rule corrects them:
+    expect(guaYun("地山谦")).toBe(9); // transcription read 6
+    expect(guaYun("水山蹇")).toBe(3); // transcription read 7
+  });
+
+  it("every 卦運 is 1-9 and never 5", () => {
+    for (const h of allHexagrams()) {
+      const y = guaYun(h);
+      expect(y).toBeGreaterThanOrEqual(1);
+      expect(y).toBeLessThanOrEqual(9);
+      expect(y).not.toBe(5);
+    }
+  });
+
+  it("錯卦 (binary complement) pairs sum to 10 — 合十", () => {
+    const COMP: Record<string, string> = { 乾: "坤", 坤: "乾", 兑: "艮", 艮: "兑", 离: "坎", 坎: "离", 震: "巽", 巽: "震" };
+    const NAT: Record<string, string> = { 天: "乾", 泽: "兑", 火: "离", 雷: "震", 风: "巽", 水: "坎", 山: "艮", 地: "坤" };
+    const trig = (n: string): [string, string] =>
+      n.includes("为") ? [n[0], n[0]] : [NAT[n[0]], NAT[n[1]]];
+    const PURE: Record<string, string> = { 乾: "乾为天", 兑: "兑为泽", 离: "离为火", 震: "震为雷", 巽: "巽为风", 坎: "坎为水", 艮: "艮为山", 坤: "坤为地" };
+    const NATofTRIG: Record<string, string> = { 乾: "天", 兑: "泽", 离: "火", 震: "雷", 巽: "风", 坎: "水", 艮: "山", 坤: "地" };
+    const nameOf = (u: string, l: string) =>
+      u === l ? PURE[u] : NATofTRIG[u] + NATofTRIG[l] + "?"; // only need the canon for lookup below
+    for (const h of allHexagrams()) {
+      const [u, l] = trig(h);
+      const compName = u === l ? PURE[COMP[u]] : allHexagrams().find((x) => {
+        const [xu, xl] = trig(x);
+        return xu === COMP[u] && xl === COMP[l];
+      });
+      expect(compName, `complement of ${h}`).toBeDefined();
+      expect(guaYun(h) + guaYun(compName!)).toBe(10);
+    }
+    void nameOf;
+  });
+
+  it("each 卦運 value (1,2,3,4,6,7,8,9) appears exactly 8 times", () => {
+    const counts: Record<number, number> = {};
+    for (const h of allHexagrams()) counts[guaYun(h)] = (counts[guaYun(h)] ?? 0) + 1;
+    for (const v of [1, 2, 3, 4, 6, 7, 8, 9]) expect(counts[v], `運${v}`).toBe(8);
   });
 });

@@ -227,3 +227,34 @@ export function buildChart(hexagram: string, dayStem: Stem | null = null): Dagua
 export function allHexagrams(): string[] {
   return Object.values(PALACE_ORDER).flat();
 }
+
+// ---------------------------------------------------------------------------
+// 卦運 / index code (INFERRED — decoded from the master's luopan, pending his
+// confirmation).
+//
+// 先天体后天用: a trigram's number = the 后天 (Lo Shu) number of the compass
+// position it occupies in the 先天 arrangement. This was reverse-engineered from
+// table B's index numbers and verified: idxTop = XT_LS[upper]·10 + XT_LS[lower]
+// reproduced all 64; 卦運 = 10 − XT_LS[upper] reproduced 62/64 and FIXED the two
+// values the 合十 law flagged as misread (地山谦→9, 水山蹇→3).
+// ---------------------------------------------------------------------------
+const XT_LS: Record<Trigram, number> = {
+  乾: 9, 兑: 4, 离: 3, 震: 8, 巽: 2, 坎: 7, 艮: 6, 坤: 1,
+};
+
+/**
+ * 卦運 (period number, 1-9 and never 5). Derived by rule (see above), so it is
+ * clean for all 64 — no transcription error. INFERRED; pending master confirmation.
+ */
+export function guaYun(hexagram: string): number {
+  const pair = HEXAGRAM_TRIGRAMS[hexagram];
+  if (!pair) throw new Error(`Unknown hexagram: ${hexagram}`);
+  return 10 - XT_LS[pair[0]]; // pair[0] = upper trigram
+}
+
+/** The luopan index code (先天体后天用 coordinate): XT_LS[upper]·10 + XT_LS[lower]. */
+export function indexCode(hexagram: string): number {
+  const pair = HEXAGRAM_TRIGRAMS[hexagram];
+  if (!pair) throw new Error(`Unknown hexagram: ${hexagram}`);
+  return XT_LS[pair[0]] * 10 + XT_LS[pair[1]];
+}
