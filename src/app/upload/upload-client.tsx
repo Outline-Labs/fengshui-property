@@ -414,12 +414,6 @@ function Report({
           </span>
           <span className="text-2xl text-muted font-display">/ 10</span>
         </div>
-        {analysis.engine && (
-          <p className="mt-2 text-[11px] tracking-wide text-jade">
-            ● Computed from flying stars + eight mansions — the same plan always
-            scores the same.
-          </p>
-        )}
         {analysis.summary && (
           <p className="mt-4 text-ink-soft leading-relaxed">{analysis.summary}</p>
         )}
