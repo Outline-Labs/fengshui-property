@@ -17,9 +17,25 @@ seems to contradict it.
 
 ---
 
-## A. 卦運 (the "luck period" of each hexagram)
+## A. 卦運 (the "luck period" of each hexagram) — ✅ RESOLVED 2026-06
 
-**推断规则 / Inferred rule:**
+> **结论：卦運 用「归藏」生成，不是 10 − 上卦数，也不是合十。** 地山谦 = 6。
+> 引擎 (`dagua.guaYun()`) 已改用归藏法。
+>
+> 归藏：两卦逐爻比较，同爻為陰(0)、異爻為陽(1)（即 XOR）→ 得一卦 → 取其先天配洛书数。
+> 例：地山谦 = 坤(000) ⊕ 艮(001) = 艮(001) → 6。合十 只是「关系/成局/校验」，不是生成公式。
+>
+> **重要发现 / Key finding:** 我们手抄的源图表 B 里那一列「卦運」数字，其实**不是**归藏卦運
+> ——它符合另一套（合十型）口诀，与归藏在 56/64 卦上不同（例：山泽损，源图列 4，归藏 9）。
+> 所以 `dagua-source.ts` 里的 `guaYun` 字段已标注为「源图原始记录，非引擎卦運」，仅作存证，不参与计算。
+> 早先把地山谦改成 9 的「OCR 修正」是基于错误规则，已撤销。
+>
+> 仍待师傅确认：水山蹇 源图记录是 7（归藏给 2）——源图该列既非归藏，这个差异不影响引擎，
+> 但若要弄清源图那列到底是什么口诀，可一并请教。
+
+*(Original inferred rule below — kept for the record. It was wrong.)*
+
+**推断规则 / Inferred rule (WRONG — superseded by 归藏 above):**
 > 卦運 = 10 − M(上卦)，其中 M = 该卦先天卦位的「后天数」：
 > 乾 9 · 兑 4 · 离 3 · 震 8 · 巽 2 · 坎 7 · 艮 6 · 坤 1。
 
