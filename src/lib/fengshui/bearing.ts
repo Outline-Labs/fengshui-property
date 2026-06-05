@@ -7,9 +7,11 @@
 // B's placement agree on all 64; opposite slices are 错卦 with 0 failures;
 // anchors hold). The 24-mountain ring (15° each) is kept as a coarse label.
 //
-// STILL GATED: each hexagram's 卦運 is transcribed but ~4 values are suspect
-// (see SUSPECT_GUAYUN), and the index-pair meaning is undecoded — so 旺/衰 and
-// anything 卦運-driven stays gated in spatial.ts until the practitioner confirms.
+// STILL GATED: every hexagram's 卦運 is now rule-derived and internally
+// consistent (合十 pairs sum to 10; each value 1–9 appears 8×, so no values
+// remain suspect), but the rule itself is INFERRED and the index-pair meaning
+// is undecoded — so 旺/衰 and anything 卦運-driven stays gated in spatial.ts
+// until the practitioner confirms.
 
 import { type DaguaChart, type Stem, buildChart } from "./dagua";
 import { type HexSourceMeta, HEX_SOURCE, RING } from "./dagua-source";

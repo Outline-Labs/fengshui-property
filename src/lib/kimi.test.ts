@@ -125,6 +125,33 @@ describe("analyzeFloorPlanImage — request wiring", () => {
     expect(textPart.text).toContain("condo");
     expect(textPart.text).toContain("2018");
   });
+
+  it("requests the reading deterministically (temperature 0) so the same plan reads the same", async () => {
+    const fetchMock = vi.fn(async () => chatResponse(GOOD_MODEL_JSON));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await analyzeFloorPlanImage({ imageDataUrl: IMG, facing: "N" });
+
+    const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(opts.body));
+    expect(body.temperature).toBe(0);
+  });
+
+  it("grounds the model in the deterministic flying-stars chart as ground truth", async () => {
+    const fetchMock = vi.fn(async () => chatResponse(GOOD_MODEL_JSON));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await analyzeFloorPlanImage({ imageDataUrl: IMG, facing: "N" }); // no year → Period 9
+
+    const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(opts.body));
+    const userMsg = body.messages.find((m: { role: string }) => m.role === "user");
+    const text = userMsg.content.find((p: { type: string }) => p.type === "text").text;
+    // The real natal chart is injected so the model can't invent star positions.
+    expect(text).toContain("flying-stars chart");
+    expect(text).toContain("Period 9");
+    expect(text).toMatch(/山\d/); // a per-palace mountain star, e.g. 山4
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -224,13 +251,16 @@ describe("analyzeFloorPlanImage — coerces out-of-contract field values", () =>
     expect(low.score).toBe(0);
   });
 
-  it("defaults a non-numeric / missing score to the neutral midpoint 5", async () => {
+  it("fails honestly on a non-numeric / missing score instead of faking a 5", async () => {
+    // The score IS the verdict — a missing one is an incomplete reading, not a
+    // neutral 5.0. The caller refunds the credit on this throw.
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => chatResponse(JSON.stringify({ score: "not a number" }))),
     );
-    const result = await analyzeFloorPlanImage({ imageDataUrl: IMG, facing: "S" });
-    expect(result.score).toBe(5);
+    await expect(
+      analyzeFloorPlanImage({ imageDataUrl: IMG, facing: "S" }),
+    ).rejects.toThrow(/incomplete/i);
   });
 
   it("defaults an unknown confidence to 'medium'", async () => {
@@ -262,8 +292,9 @@ describe("analyzeFloorPlanImage — coerces out-of-contract field values", () =>
     expect(result.factors).toHaveLength(1);
     expect(result.factors[0].severity).toBe(2);
     expect(result.factors[0].type).toBe("negative");
-    // missing principle defaults to a 峦头 (Form School) label, not empty.
-    expect(result.factors[0].principle).toBe("峦头");
+    // an unrecognised / missing school attribution is blanked, NOT silently
+    // mislabelled as 峦头 (Form School).
+    expect(result.factors[0].principle).toBe("");
   });
 
   it("drops non-object array entries and defaults a missing room sector to '—'", async () => {
@@ -355,30 +386,30 @@ describe("analyzeFloorPlanImage — unparseable model output", () => {
 // Transport / API errors — never swallow a failure into a fake reading.
 // ---------------------------------------------------------------------------
 describe("analyzeFloorPlanImage — transport & API errors", () => {
-  it("throws including the status code on a non-ok HTTP response", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        async () =>
-          new Response("upstream is on fire", { status: 500 }),
-      ),
+  it("retries once then surfaces a friendly (not raw) error on a 5xx", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response("upstream is on fire", { status: 500 }),
     );
+    vi.stubGlobal("fetch", fetchMock);
     await expect(
       analyzeFloorPlanImage({ imageDataUrl: IMG, facing: "S" }),
-    ).rejects.toThrow(/Kimi 500/);
+    ).rejects.toThrow(/busy right now/i);
+    // a transient 5xx is retried exactly once before giving up.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("surfaces a 401 (bad key) distinctly from the 'not configured' guard", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("invalid api key", { status: 401 })),
+  it("does not retry or leak a 401 (bad key) — shows a generic unavailable message", async () => {
+    const fetchMock = vi.fn(
+      async () => new Response("invalid api key", { status: 401 }),
     );
+    vi.stubGlobal("fetch", fetchMock);
     await expect(
       analyzeFloorPlanImage({ imageDataUrl: IMG, facing: "S" }),
-    ).rejects.toThrow(/Kimi 401/);
+    ).rejects.toThrow(/temporarily unavailable/i);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // 401 is not transient
   });
 
-  it("throws the model's error.message when the body carries a 200 error object", async () => {
+  it("maps a 200-with-error body to a friendly error (no raw provider text)", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -391,6 +422,6 @@ describe("analyzeFloorPlanImage — transport & API errors", () => {
     );
     await expect(
       analyzeFloorPlanImage({ imageDataUrl: IMG, facing: "S" }),
-    ).rejects.toThrow("rate limit exceeded");
+    ).rejects.toThrow(/couldn't complete the reading/i);
   });
 });

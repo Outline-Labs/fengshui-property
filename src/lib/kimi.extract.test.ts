@@ -104,8 +104,12 @@ describe("extractFloorPlanFeatures — vision → geometry (no judgment)", () =>
     );
   });
 
-  it("throws on a non-ok HTTP response", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => kimiResponse("rate limited", 429)));
-    await expect(extractFloorPlanFeatures({ imageDataUrl: "data:," })).rejects.toThrow(/Kimi 429/);
+  it("retries a transient 429 once, then throws a friendly error", async () => {
+    const fetchMock = vi.fn(async () => kimiResponse("rate limited", 429));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      extractFloorPlanFeatures({ imageDataUrl: "data:," }),
+    ).rejects.toThrow(/busy right now/i);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
