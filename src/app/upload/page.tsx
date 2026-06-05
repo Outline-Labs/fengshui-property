@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { SiteMasthead } from "@/components/site-masthead";
+import { safeConsumerHost } from "@/lib/consumer-hosts";
+import { REFERRAL_REWARD, getReferralStats } from "@/lib/credits";
 import { getCredits } from "@/lib/leads";
 import { partnersEnabled } from "@/lib/partners";
 import { MAX_QUOTA } from "@/lib/quota";
 import { getLeadId } from "@/lib/session";
+import { READING_PACKS, stripeConfigured } from "@/lib/stripe";
 
 import { UploadClient } from "./upload-client";
 
@@ -15,12 +19,24 @@ export const metadata: Metadata = {
     "Upload your floor plan for a unit-level fengshui reading — form school, flying stars (Period 9), and eight mansions.",
 };
 
-export default async function UploadPage() {
+export default async function UploadPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ credits?: string; error?: string }>;
+}) {
+  const { credits, error } = await searchParams;
   const leadId = await getLeadId();
   if (!leadId) redirect("/signup?next=/upload");
 
-  const { lead, remaining, quota } = await getCredits(leadId);
+  const { lead, remaining, quota, freeQuota, bonusReadings } =
+    await getCredits(leadId);
   if (!lead) redirect("/signup?next=/upload");
+
+  const stats = await getReferralStats(leadId);
+  const h = await headers();
+  const host = safeConsumerHost(h.get("host"));
+  const proto = host.includes("localhost") ? "http" : "https";
+  const referralUrl = `${proto}://${host}/signup?ref=${stats.code}`;
 
   return (
     <>
@@ -28,7 +44,17 @@ export default async function UploadPage() {
       <UploadClient
         remaining={remaining}
         quota={quota}
-        canUpgrade={quota < MAX_QUOTA}
+        freeQuota={freeQuota}
+        bonusReadings={bonusReadings}
+        canUpgrade={freeQuota < MAX_QUOTA}
+        referralUrl={referralUrl}
+        referralReward={REFERRAL_REWARD}
+        referralEarned={stats.earnedReadings}
+        referralCount={stats.rewarded}
+        packs={[...READING_PACKS]}
+        stripeReady={stripeConfigured()}
+        creditsBanner={credits}
+        errorBanner={error}
         specialistEnabled={partnersEnabled()}
         specialistRequested={lead.wantsAgent === 1}
         specialistPhone={lead.phone}

@@ -38,6 +38,10 @@ export function ensureSchema(): Promise<void> {
           phone_verified INTEGER NOT NULL DEFAULT 0,
           wants_agent INTEGER NOT NULL DEFAULT 0,
           verified_at INTEGER,
+          bonus_readings INTEGER NOT NULL DEFAULT 0,
+          referral_code TEXT,
+          referred_by TEXT,
+          referral_activated INTEGER NOT NULL DEFAULT 0,
           otp_code TEXT,
           otp_expires_at INTEGER,
           otp_attempts INTEGER NOT NULL DEFAULT 0,
@@ -45,11 +49,17 @@ export function ensureSchema(): Promise<void> {
           updated_at INTEGER NOT NULL
         )
       `);
-      // Idempotent column migrations for pre-existing dev databases.
+      // Idempotent column migrations for pre-existing dev databases. Note:
+      // referral_code is plain TEXT here — SQLite rejects ADD COLUMN ... UNIQUE,
+      // so its uniqueness is the standalone index created below.
       for (const [col, def] of [
         ["phone_verified", "INTEGER NOT NULL DEFAULT 0"],
         ["wants_agent", "INTEGER NOT NULL DEFAULT 0"],
         ["verified_at", "INTEGER"],
+        ["bonus_readings", "INTEGER NOT NULL DEFAULT 0"],
+        ["referral_code", "TEXT"],
+        ["referred_by", "TEXT"],
+        ["referral_activated", "INTEGER NOT NULL DEFAULT 0"],
         ["otp_code", "TEXT"],
         ["otp_expires_at", "INTEGER"],
         ["otp_attempts", "INTEGER NOT NULL DEFAULT 0"],
@@ -60,6 +70,10 @@ export function ensureSchema(): Promise<void> {
           // column already exists
         }
       }
+      // Referral-code uniqueness (allows multiple NULLs for codeless leads).
+      await client.execute(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_referral_code ON leads (referral_code)`,
+      );
       await client.execute(`
         CREATE TABLE IF NOT EXISTS analyses (
           id TEXT PRIMARY KEY,
@@ -120,6 +134,23 @@ export function ensureSchema(): Promise<void> {
       `);
       await client.execute(
         `CREATE INDEX IF NOT EXISTS idx_wallet_tx_agent ON wallet_transactions (agent_id, created_at)`,
+      );
+      // Append-only consumer reading-credit ledger (referral rewards + pack
+      // purchases). UNIQUE(ref) is the idempotency key — Stripe session id for
+      // purchases, referral:<refereeId> / referee:<leadId> for referral grants.
+      await client.execute(`
+        CREATE TABLE IF NOT EXISTS reading_grants (
+          id TEXT PRIMARY KEY,
+          lead_id TEXT NOT NULL,
+          amount INTEGER NOT NULL,
+          kind TEXT NOT NULL,
+          ref TEXT NOT NULL UNIQUE,
+          balance_after INTEGER NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+      `);
+      await client.execute(
+        `CREATE INDEX IF NOT EXISTS idx_reading_grants_lead ON reading_grants (lead_id, created_at)`,
       );
     })();
   }

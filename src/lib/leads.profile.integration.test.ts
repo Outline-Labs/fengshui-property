@@ -211,7 +211,14 @@ describe("normalizeSgMobile", () => {
 describe("getCredits — quota / used / remaining math", () => {
   it("returns all zeros and a null lead for an unknown id", async () => {
     const c = await getCredits("nobody");
-    expect(c).toEqual({ lead: null, quota: 0, used: 0, remaining: 0 });
+    expect(c).toEqual({
+      lead: null,
+      quota: 0,
+      freeQuota: 0,
+      bonusReadings: 0,
+      used: 0,
+      remaining: 0,
+    });
   });
 
   it("email-only lead → quota 1, nothing used yet", async () => {

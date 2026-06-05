@@ -1,27 +1,55 @@
 import { sql } from "drizzle-orm";
-import { check, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  check,
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
-export const leads = sqliteTable("leads", {
-  id: text("id").primaryKey(),
-  email: text("email").notNull().unique(),
-  name: text("name"),
-  phone: text("phone"),
-  propertyInterest: text("property_interest"),
-  timeline: text("timeline"),
-  // Verification: a lead is only sellable once the phone is OTP-verified AND
-  // they've explicitly asked to be matched with an agent.
-  phoneVerified: integer("phone_verified").notNull().default(0),
-  wantsAgent: integer("wants_agent").notNull().default(0),
-  verifiedAt: integer("verified_at"),
-  // Legacy: OTP codes were stored here when we managed them ourselves. Twilio
-  // Verify now owns the code lifecycle, so these are unused — kept to avoid a
-  // destructive migration on existing databases.
-  otpCode: text("otp_code"),
-  otpExpiresAt: integer("otp_expires_at"),
-  otpAttempts: integer("otp_attempts").notNull().default(0),
-  createdAt: integer("created_at").notNull(),
-  updatedAt: integer("updated_at").notNull(),
-});
+export const leads = sqliteTable(
+  "leads",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull().unique(),
+    name: text("name"),
+    phone: text("phone"),
+    propertyInterest: text("property_interest"),
+    timeline: text("timeline"),
+    // Verification: a lead is only sellable once the phone is OTP-verified AND
+    // they've explicitly asked to be matched with an agent.
+    phoneVerified: integer("phone_verified").notNull().default(0),
+    wantsAgent: integer("wants_agent").notNull().default(0),
+    verifiedAt: integer("verified_at"),
+    // Consumer reading credits beyond the profile-based free quota: readings
+    // earned by referring friends or bought as a pack. The effective allowance
+    // is computeQuota(profile) + bonusReadings; only ever bumped atomically
+    // alongside a reading_grants ledger row via db.batch (see lib/credits.ts).
+    bonusReadings: integer("bonus_readings").notNull().default(0),
+    // Each lead's own shareable referral code, and the code they signed up
+    // under. referralActivated flips to 1 once this lead completes a reading,
+    // which is what releases their referrer's reward (gated on real usage, not
+    // a bare signup, so codes can't be farmed).
+    referralCode: text("referral_code"),
+    referredBy: text("referred_by"),
+    referralActivated: integer("referral_activated").notNull().default(0),
+    // Legacy: OTP codes were stored here when we managed them ourselves. Twilio
+    // Verify now owns the code lifecycle, so these are unused — kept to avoid a
+    // destructive migration on existing databases.
+    otpCode: text("otp_code"),
+    otpExpiresAt: integer("otp_expires_at"),
+    otpAttempts: integer("otp_attempts").notNull().default(0),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [
+    // SQLite forbids ADD COLUMN ... UNIQUE, so referral-code uniqueness is a
+    // standalone unique index (multiple NULLs allowed). Mirrors the raw DDL in
+    // db/index.ts.
+    uniqueIndex("idx_leads_referral_code").on(t.referralCode),
+  ],
+);
 
 export const analyses = sqliteTable("analyses", {
   id: text("id").primaryKey(),
@@ -68,6 +96,22 @@ export const walletTransactions = sqliteTable("wallet_transactions", {
   createdAt: integer("created_at").notNull(),
 });
 
+// Append-only consumer reading-credit ledger: referral rewards/bonuses (+) and
+// pack purchases (+). The lead-side mirror of wallet_transactions. `ref` is the
+// idempotency key — the Stripe Checkout Session id for purchases (so a
+// redelivered webhook grants once), `referral:<refereeId>` for a referrer's
+// reward (one per referee), `referee:<leadId>` for the signup bonus.
+// `balanceAfter` snapshots leads.bonus_readings for reconciliation.
+export const readingGrants = sqliteTable("reading_grants", {
+  id: text("id").primaryKey(),
+  leadId: text("lead_id").notNull(),
+  amount: integer("amount").notNull(), // readings granted (always > 0)
+  kind: text("kind").notNull(), // referral_reward | referee_bonus | purchase
+  ref: text("ref").notNull().unique(),
+  balanceAfter: integer("balance_after").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
 export const claims = sqliteTable("claims", {
   id: text("id").primaryKey(),
   leadId: text("lead_id").notNull().unique(), // FCFS — a lead is claimed once
@@ -81,3 +125,4 @@ export type Lead = typeof leads.$inferSelect;
 export type Agent = typeof agents.$inferSelect;
 export type Claim = typeof claims.$inferSelect;
 export type WalletTransaction = typeof walletTransactions.$inferSelect;
+export type ReadingGrant = typeof readingGrants.$inferSelect;

@@ -214,7 +214,8 @@ export async function reserveReading(
   await ensureSchema();
   const lead = await getLead(leadId);
   if (!lead) return { ok: false, reason: "no_session" };
-  const quota = computeQuota(lead);
+  // Effective allowance = profile-based free quota + credits earned/bought.
+  const quota = computeQuota(lead) + lead.bonusReadings;
   const id = crypto.randomUUID();
   const now = Date.now();
 
@@ -249,19 +250,32 @@ export async function releaseReading(id: string): Promise<void> {
 
 export type Credits = {
   lead: Lead | null;
-  quota: number;
+  quota: number; // total allowance = freeQuota + bonusReadings
+  freeQuota: number; // profile-based free readings
+  bonusReadings: number; // readings earned (referrals) or bought (packs)
   used: number;
   remaining: number;
 };
 
 export async function getCredits(leadId: string): Promise<Credits> {
   const lead = await getLead(leadId);
-  if (!lead) return { lead: null, quota: 0, used: 0, remaining: 0 };
-  const quota = computeQuota(lead);
+  if (!lead) {
+    return { lead: null, quota: 0, freeQuota: 0, bonusReadings: 0, used: 0, remaining: 0 };
+  }
+  const freeQuota = computeQuota(lead);
+  const bonusReadings = lead.bonusReadings;
+  const quota = freeQuota + bonusReadings;
   const rows = await db
     .select({ id: analyses.id })
     .from(analyses)
     .where(eq(analyses.leadId, leadId));
   const used = rows.length;
-  return { lead, quota, used, remaining: Math.max(0, quota - used) };
+  return {
+    lead,
+    quota,
+    freeQuota,
+    bonusReadings,
+    used,
+    remaining: Math.max(0, quota - used),
+  };
 }
