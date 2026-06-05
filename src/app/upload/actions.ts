@@ -9,6 +9,8 @@ import {
   reserveReading,
   verifyOtpAndRequestAgent,
 } from "@/lib/leads";
+import { dir8FromString } from "@/lib/fengshui/flying-stars";
+import { computeUnitReading } from "@/lib/fengshui/unit-reading";
 import { analyzeFloorPlanImage } from "@/lib/kimi";
 import { getLeadId } from "@/lib/session";
 import type { FloorPlanAnalysis } from "@/lib/types";
@@ -62,11 +64,33 @@ export async function analyzeFloorPlan(
   }
 
   try {
-    const analysis = await analyzeFloorPlanImage({
-      imageDataUrl,
-      facing,
-      yearBuilt: yearBuilt && yearBuilt > 1900 ? yearBuilt : undefined,
-    });
+    const year = yearBuilt && yearBuilt > 1900 ? yearBuilt : undefined;
+    // The LLM is perception only: rooms + their sectors + form-school (峦头) notes.
+    const llm = await analyzeFloorPlanImage({ imageDataUrl, facing, yearBuilt: year });
+
+    // The deterministic engine owns the verdict: Flying Stars + Eight Mansions →
+    // a reproducible score and 八宅/玄空飞星 factors. We keep the LLM's form-school
+    // observations and its rooms/summary/recommendations.
+    const dir = dir8FromString(facing);
+    const analysis: FloorPlanAnalysis = dir
+      ? (() => {
+          const det = computeUnitReading(dir, year, llm.rooms);
+          const formSchool = llm.factors.filter((f) => f.principle === "峦头");
+          return {
+            ...llm,
+            score: det.score,
+            factors: [...det.factors, ...formSchool],
+            engine: {
+              period: det.period,
+              group: det.group,
+              houseGua: det.houseGua,
+              auspicious: det.auspicious,
+              inauspicious: det.inauspicious,
+            },
+          };
+        })()
+      : llm; // facing not one of the 8 directions — fall back to the LLM reading
+
     await finalizeReading(reservation.id, facing, analysis.score);
     // A completed reading is "activation": release the referrer's reward (if any).
     // Idempotent and best-effort — never fail the reading over a referral bump.

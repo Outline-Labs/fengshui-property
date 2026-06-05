@@ -1,0 +1,92 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+// ---------------------------------------------------------------------------
+// analyzeFloorPlan is the seam where the LLM (perception) meets the
+// deterministic engine (verdict). We mock the LLM + the credit/session
+// collaborators, but run the REAL Flying-Stars/Eight-Mansions engine, and assert
+// the engine — not the model — owns the score and the 八宅/玄空飞星 factors.
+// ---------------------------------------------------------------------------
+
+const getLeadId = vi.fn<() => Promise<string | null>>(async () => "lead-1");
+vi.mock("@/lib/session", () => ({ getLeadId: () => getLeadId() }));
+
+const reserveReading = vi.fn(async () => ({ ok: true, id: "res-1", remaining: 2 }));
+const finalizeReading = vi.fn(async () => {});
+const releaseReading = vi.fn(async () => {});
+vi.mock("@/lib/leads", () => ({
+  reserveReading: (...a: unknown[]) => reserveReading(...a),
+  finalizeReading: (...a: unknown[]) => finalizeReading(...a),
+  releaseReading: (...a: unknown[]) => releaseReading(...a),
+  requestOtp: vi.fn(),
+  verifyOtpAndRequestAgent: vi.fn(),
+}));
+
+vi.mock("@/lib/credits", () => ({ applyReferralActivation: vi.fn(async () => {}) }));
+
+const analyzeFloorPlanImage = vi.fn();
+vi.mock("@/lib/kimi", () => ({
+  analyzeFloorPlanImage: (p: unknown) => analyzeFloorPlanImage(p),
+}));
+
+import { computeUnitReading } from "@/lib/fengshui/unit-reading";
+
+import { analyzeFloorPlan } from "./actions";
+
+const IMG = "data:image/png;base64,AAAA";
+
+// A model reply whose score (9.9) the engine can never produce — so an override
+// is provable — and whose factors mix a form-school note with a stray 八宅 opinion.
+const LLM = {
+  score: 9.9,
+  summary: "ok",
+  facing: "South",
+  confidence: "high" as const,
+  rooms: [
+    { name: "Kitchen", sector: "SE" },
+    { name: "Bathroom", sector: "SW" },
+  ],
+  factors: [
+    { type: "negative" as const, severity: 2 as const, title: "Beam over the bed", principle: "峦头", description: "form school" },
+    { type: "positive" as const, severity: 3 as const, title: "LLM eight-mansions opinion", principle: "八宅", description: "should be dropped" },
+  ],
+  recommendations: [{ title: "r", detail: "d" }],
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  getLeadId.mockResolvedValue("lead-1");
+  reserveReading.mockResolvedValue({ ok: true, id: "res-1", remaining: 2 });
+  analyzeFloorPlanImage.mockResolvedValue(LLM);
+});
+
+describe("analyzeFloorPlan — deterministic engine wiring", () => {
+  it("replaces the LLM score with the computed engine score and attaches the engine summary", async () => {
+    const res = await analyzeFloorPlan(IMG, "South", 2024);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    const det = computeUnitReading("S", 2024, LLM.rooms);
+    expect(res.analysis.score).toBe(det.score);
+    expect(res.analysis.score).not.toBe(9.9);
+    expect(res.analysis.engine).toBeDefined();
+    expect(res.analysis.engine!.group).toBe("东四宅"); // facing S → 坎 house
+    expect(res.analysis.engine!.houseGua).toBe("坎");
+    // the DETERMINISTIC score (not the model's 9.9) is what gets persisted
+    expect(finalizeReading).toHaveBeenCalledWith("res-1", "South", det.score);
+  });
+
+  it("keeps the LLM's 峦头 factors but swaps its 八宅/飞星 opinions for the engine's", async () => {
+    const res = await analyzeFloorPlan(IMG, "South", 2024);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    const titles = res.analysis.factors.map((f) => f.title);
+    expect(titles).toContain("Beam over the bed"); // form-school perception kept
+    expect(titles).not.toContain("LLM eight-mansions opinion"); // model's verdict dropped
+    expect(
+      res.analysis.factors.some(
+        (f) => f.principle === "八宅" || f.principle === "玄空飞星",
+      ),
+    ).toBe(true); // engine-computed verdicts present
+  });
+});

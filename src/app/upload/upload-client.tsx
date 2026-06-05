@@ -11,7 +11,11 @@ import {
   type FlyingStarChart,
 } from "@/lib/fengshui/flying-stars";
 import type { ReadingPack } from "@/lib/stripe";
-import type { FloorPlanAnalysis, FloorPlanFactor } from "@/lib/types";
+import type {
+  FloorPlanAnalysis,
+  FloorPlanFactor,
+  UnitEngineSummary,
+} from "@/lib/types";
 
 import { analyzeFloorPlan } from "./actions";
 import { buyReadingsAction } from "./credits-actions";
@@ -410,10 +414,18 @@ function Report({
           </span>
           <span className="text-2xl text-muted font-display">/ 10</span>
         </div>
+        {analysis.engine && (
+          <p className="mt-2 text-[11px] tracking-wide text-jade">
+            ● Computed from flying stars + eight mansions — the same plan always
+            scores the same.
+          </p>
+        )}
         {analysis.summary && (
           <p className="mt-4 text-ink-soft leading-relaxed">{analysis.summary}</p>
         )}
       </div>
+
+      {analysis.engine && <EightMansions engine={analysis.engine} />}
 
       {chart && (
         <section>
@@ -501,6 +513,52 @@ function Report({
         </button>
       </div>
     </div>
+  );
+}
+
+function EightMansions({ engine }: { engine: UnitEngineSummary }) {
+  return (
+    <section>
+      <SectionHead n="" title="Eight Mansions" cn="八宅" />
+      <p className="text-sm text-ink-soft leading-relaxed">
+        A <span className="text-ink">{engine.houseGua} house</span> ({engine.group}),
+        read for Period {engine.period}. Favour the auspicious sectors for
+        bedrooms, the stove, and where you spend your waking hours — and keep
+        bathrooms and storage in the inauspicious ones.
+      </p>
+      <div className="mt-4 grid grid-cols-2 gap-5">
+        <div>
+          <div className="text-[10px] tracking-[0.3em] uppercase text-jade mb-2">
+            吉 · Auspicious
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {engine.auspicious.map((d) => (
+              <span
+                key={d}
+                className="border border-jade/50 text-jade px-2.5 py-1 text-xs"
+              >
+                {d}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] tracking-[0.3em] uppercase text-cinnabar mb-2">
+            凶 · Inauspicious
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {engine.inauspicious.map((d) => (
+              <span
+                key={d}
+                className="border border-cinnabar/40 text-cinnabar px-2.5 py-1 text-xs"
+              >
+                {d}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

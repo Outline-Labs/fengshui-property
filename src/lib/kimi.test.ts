@@ -136,22 +136,6 @@ describe("analyzeFloorPlanImage — request wiring", () => {
     const body = JSON.parse(String(opts.body));
     expect(body.temperature).toBe(0);
   });
-
-  it("grounds the model in the deterministic flying-stars chart as ground truth", async () => {
-    const fetchMock = vi.fn(async () => chatResponse(GOOD_MODEL_JSON));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await analyzeFloorPlanImage({ imageDataUrl: IMG, facing: "N" }); // no year → Period 9
-
-    const [, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const body = JSON.parse(String(opts.body));
-    const userMsg = body.messages.find((m: { role: string }) => m.role === "user");
-    const text = userMsg.content.find((p: { type: string }) => p.type === "text").text;
-    // The real natal chart is injected so the model can't invent star positions.
-    expect(text).toContain("flying-stars chart");
-    expect(text).toContain("Period 9");
-    expect(text).toMatch(/山\d/); // a per-palace mountain star, e.g. 山4
-  });
 });
 
 // ---------------------------------------------------------------------------

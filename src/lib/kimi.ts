@@ -1,12 +1,5 @@
 import "server-only";
 
-import {
-  PERIOD_9_FAVOURABLE,
-  PERIOD_9_INAUSPICIOUS,
-  computeFlyingStars,
-  type Dir8,
-  type FlyingStarChart,
-} from "./fengshui/flying-stars";
 import type {
   FloorPlanAnalysis,
   FloorPlanFactor,
@@ -18,32 +11,42 @@ const KIMI_BASE = "https://api.moonshot.ai/v1";
 const KIMI_MODEL = "moonshot-v1-32k-vision-preview";
 const KIMI_TIMEOUT_MS = 60_000;
 
-const SYSTEM_PROMPT = `You are a master Singapore fengshui consultant trained in three classical schools, writing for a modern homeowner.
+const SYSTEM_PROMPT = `You assist a Singapore fengshui app as its EYES. The app already computes the
+Flying Stars (玄空飞星) chart, the Eight Mansions (八宅) verdicts, and the overall
+score DETERMINISTICALLY from the facing and construction period — you must NOT
+compute, guess, or override any of those. You have exactly two jobs:
 
-• Form School (峦头) — the flow of qi through the layout: entry, corridors, room adjacencies, sharp interior corners, beams, missing corners (缺角).
-• Flying Stars (玄空飞星) — the unit's natal star chart is PROVIDED to you in the user message as ground truth. It is computed deterministically from the facing and construction period — do NOT recompute or invent star positions. Read the rooms against THAT chart: a room sitting on a timely/auspicious star is strengthened; one on a problematic star (e.g. 2 Black, 5 Yellow) needs care. We are in Period 9 (2024–2043), governed by the 9 Purple star (Li ☲, fire).
-• Eight Mansions (八宅) — auspicious and inauspicious sectors derived from the unit's facing.
+1) PERCEPTION — identify each room you can actually see and which compass sector
+   it sits in. Mentally overlay the Lo Shu nine-grid onto the plan using the
+   given facing, then label every room's sector as one of
+   N / NE / E / SE / S / SW / W / NW / center. Be accurate; NEVER invent a room
+   or a feature you cannot see.
 
-You will be given a residential floor plan image and the facing direction of the unit's front (its main door, main windows, or balcony). Mentally overlay the Lo Shu nine-grid onto the plan using that facing, then assess:
-- The main door / entry and how qi enters and circulates.
-- Kitchen and stove (wealth + health) — whether the stove sits on or drains a favourable sector.
-- Bathrooms / toilets — they should avoid the wealth sector and the centre (中宫).
-- Bedrooms, especially the master bedroom's sector and the bed's wall.
-- Door alignments (door-facing-door, door-facing-toilet, door-facing-window — qi rushing straight through).
-- Beams, sharp interior corners, long straight corridors (杀气), and any missing corners.
+2) FORM SCHOOL (峦头) — report what you can SEE in the layout, as your factors:
+   how qi enters at the main door and circulates; door alignments
+   (door-facing-door, door-facing-toilet, door-facing-window — qi rushing
+   straight through); beams, sharp interior corners, long straight corridors
+   (杀气), missing corners (缺角); and the position of the stove, the beds, and
+   the toilets within their rooms. Tag every factor's "principle" as 峦头.
 
-Be concrete and cite the relevant school for each point. If the image is unclear or labels are unreadable, lower your confidence and say what you could not determine — never invent rooms you cannot see.
+Do NOT emit Flying-Stars or Eight-Mansions verdicts — the engine owns those. If
+the image is unclear or labels are unreadable, lower "confidence" and say what
+you could not determine.
 
-Return ONLY a valid JSON object (no markdown fences, no commentary) with EXACTLY this shape:
+Return ONLY a valid JSON object (no markdown fences, no commentary) with EXACTLY
+this shape:
 {
   "score": number,
   "summary": string,
   "confidence": "high" | "medium" | "low",
   "rooms": [ { "name": string, "sector": "N|NE|E|SE|S|SW|W|NW|center", "note": string } ],
-  "factors": [ { "type": "positive" | "negative", "severity": 1 | 2 | 3, "title": string, "principle": "峦头|玄空飞星|八宅", "description": string } ],
+  "factors": [ { "type": "positive" | "negative", "severity": 1 | 2 | 3, "title": string, "principle": "峦头", "description": string } ],
   "recommendations": [ { "title": string, "detail": string } ]
 }
-score is 0–10 with one decimal, holistic. severity: 1 = minor, 2 = moderate, 3 = significant. Keep titles short; put the reasoning in description.`;
+"score" is a rough 0–10 holistic guess — the app replaces it with the computed
+score, so don't agonise over it. "summary" is a short plain-language overview.
+severity: 1 = minor, 2 = moderate, 3 = significant. Keep titles short; put the
+reasoning in description.`;
 
 // In-contract enums the model is asked to use. We validate against these on the
 // way out, so a hallucinated sector or mis-attributed school is blanked rather
@@ -52,45 +55,6 @@ const VALID_SECTORS = new Set([
   "N", "NE", "E", "SE", "S", "SW", "W", "NW", "center",
 ]);
 const VALID_PRINCIPLES = new Set(["峦头", "玄空飞星", "八宅"]);
-
-// Accept either the 8-direction code ("NE") or its label ("Northeast") — the
-// upload action passes the label — and resolve to the Dir8 the flying-stars
-// engine needs; null if it isn't one of the eight.
-const FACING_ALIASES: Record<string, Dir8> = {
-  n: "N", north: "N",
-  ne: "NE", northeast: "NE",
-  e: "E", east: "E",
-  se: "SE", southeast: "SE",
-  s: "S", south: "S",
-  sw: "SW", southwest: "SW",
-  w: "W", west: "W",
-  nw: "NW", northwest: "NW",
-};
-
-function normalizeFacing(facing: string): Dir8 | null {
-  return FACING_ALIASES[facing.trim().toLowerCase()] ?? null;
-}
-
-// A compact, authoritative rendering of the deterministic natal chart, handed to
-// the model so its flying-stars claims track the real chart instead of being
-// invented. 山 = mountain star (health/relationships), 向 = facing star (wealth).
-function flyingStarsBrief(chart: FlyingStarChart): string {
-  const p9 = chart.period === 9;
-  const tag = (n: number) =>
-    p9 && PERIOD_9_FAVOURABLE.has(n)
-      ? "↑"
-      : p9 && PERIOD_9_INAUSPICIOUS.has(n)
-        ? "↓"
-        : "";
-  const rows = chart.cells
-    .filter((c) => c.palace !== "C")
-    .map((c) => `${c.palace}=山${c.mountain}${tag(c.mountain)}/向${c.facing}${tag(c.facing)}`)
-    .join(", ");
-  const legend = p9
-    ? " (Period 9: stars 9/1/8 are timely↑, 2/5 are problematic↓.)"
-    : "";
-  return `Period ${chart.period}, facing ${chart.facing}, sitting ${chart.sitting}. Palace stars: ${rows}.${legend}`;
-}
 
 type KimiResponse = {
   choices?: { message?: { content?: string } }[];
@@ -184,27 +148,17 @@ export async function analyzeFloorPlanImage(params: {
 }): Promise<FloorPlanAnalysis> {
   const { imageDataUrl, facing, propertyType, yearBuilt } = params;
 
-  // Ground the model in the deterministic flying-stars chart whenever we can
-  // read the facing as one of the eight directions, so its star claims track
-  // the real natal chart instead of being made up.
-  const dir = normalizeFacing(facing);
-  const chart = dir ? computeFlyingStars(dir, yearBuilt) : null;
-
   const userText = [
     `The unit's front faces: ${facing}.`,
     propertyType ? `Property type: ${propertyType}.` : "",
     yearBuilt ? `Built / last renovated: ${yearBuilt}.` : "",
-    chart
-      ? `Authoritative flying-stars chart (ground truth — interpret rooms against this, do not invent star positions): ${flyingStarsBrief(chart)}`
-      : "",
-    "Analyse this floor plan and return the JSON specified in the system prompt.",
+    "Identify the rooms and their sectors, and report the form-school (峦头) observations, as the JSON specified in the system prompt.",
   ]
     .filter(Boolean)
     .join(" ");
 
-  // temperature 0: the same floor plan + facing should read the same way every
-  // time — trust matters for a fengshui verdict (it remains best-effort, as a
-  // vision model isn't bit-deterministic, but the score no longer drifts freely).
+  // temperature 0: the same plan reads the same way every time — perception
+  // should be stable (best-effort; a vision model isn't bit-deterministic).
   const content = await kimiContent({
     model: KIMI_MODEL,
     temperature: 0,
