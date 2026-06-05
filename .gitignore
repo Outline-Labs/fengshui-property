@@ -44,3 +44,6 @@ next-env.d.ts
 # local sqlite
 data/*.db
 data/*.db-*
+
+# practitioner source charts (provenance for the Da Gua engine; not shipped)
+/Fengshui Source/

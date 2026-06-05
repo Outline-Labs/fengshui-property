@@ -148,9 +148,8 @@ export function SignupClient({
               <span aria-hidden>→</span>
             </button>
             <p className="text-[10px] tracking-wide text-muted mt-5 max-w-md leading-relaxed">
-              By continuing you agree we may contact you, or connect you with a
-              local property specialist, about your interest. See our privacy
-              policy.
+              By continuing you agree we may contact you about your readings and
+              your interest. See our privacy policy.
             </p>
           </div>
         </form>

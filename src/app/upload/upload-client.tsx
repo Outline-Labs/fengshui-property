@@ -31,12 +31,14 @@ export function UploadClient({
   remaining: initialRemaining,
   quota,
   canUpgrade,
+  specialistEnabled,
   specialistRequested,
   specialistPhone,
 }: {
   remaining: number;
   quota: number;
   canUpgrade: boolean;
+  specialistEnabled: boolean;
   specialistRequested: boolean;
   specialistPhone: string | null;
 }) {
@@ -245,8 +247,10 @@ export function UploadClient({
                   <p className="text-ink-soft text-sm leading-relaxed mb-4 max-w-sm">
                     You&rsquo;ve used your free readings.{" "}
                     {canUpgrade
-                      ? "Complete your profile to unlock more, or have a local specialist walk you through your unit in person."
-                      : "Have a local property specialist walk you through your unit in person — free."}
+                      ? "Complete your profile to unlock more."
+                      : specialistEnabled
+                        ? "Have a local property specialist walk you through your unit in person — free."
+                        : "More readings are coming soon."}
                   </p>
                   <div className="flex flex-wrap gap-x-8 gap-y-3">
                     {canUpgrade && (
@@ -257,12 +261,14 @@ export function UploadClient({
                         Unlock more <span aria-hidden>→</span>
                       </a>
                     )}
-                    <a
-                      href="/signup?next=/upload"
-                      className="text-sm text-ink-soft hover:text-cinnabar transition-colors self-center"
-                    >
-                      Talk to a specialist
-                    </a>
+                    {specialistEnabled && (
+                      <a
+                        href="/signup?next=/upload"
+                        className="text-sm text-ink-soft hover:text-cinnabar transition-colors self-center"
+                      >
+                        Talk to a specialist
+                      </a>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -299,6 +305,7 @@ export function UploadClient({
                       )
                     : null
                 }
+                specialistEnabled={specialistEnabled}
                 specialistRequested={specialistRequested}
                 specialistPhone={specialistPhone}
                 onReset={reset}
@@ -330,12 +337,14 @@ function ReportPlaceholder() {
 function Report({
   analysis,
   chart,
+  specialistEnabled,
   specialistRequested,
   specialistPhone,
   onReset,
 }: {
   analysis: FloorPlanAnalysis;
   chart: FlyingStarChart | null;
+  specialistEnabled: boolean;
   specialistRequested: boolean;
   specialistPhone: string | null;
   onReset: () => void;
@@ -429,10 +438,12 @@ function Report({
         </section>
       )}
 
-      <TalkToSpecialist
-        requested={specialistRequested}
-        initialPhone={specialistPhone}
-      />
+      {specialistEnabled && (
+        <TalkToSpecialist
+          requested={specialistRequested}
+          initialPhone={specialistPhone}
+        />
+      )}
 
       <div className="border-t border-line pt-5">
         <button
