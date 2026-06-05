@@ -14,11 +14,13 @@ const reserveReading = vi.fn(async () => ({ ok: true, id: "res-1", remaining: 2 
 const finalizeReading = vi.fn(async () => {});
 const releaseReading = vi.fn(async () => {});
 const getCredits = vi.fn(async () => ({ remaining: 5 }));
+const floorPlanReadingsSince = vi.fn(async () => 0);
 vi.mock("@/lib/leads", () => ({
   reserveReading: (...a: unknown[]) => reserveReading(...a),
   finalizeReading: (...a: unknown[]) => finalizeReading(...a),
   releaseReading: (...a: unknown[]) => releaseReading(...a),
   getCredits: (...a: unknown[]) => getCredits(...a),
+  floorPlanReadingsSince: (...a: unknown[]) => floorPlanReadingsSince(...a),
   requestOtp: vi.fn(),
   verifyOtpAndRequestAgent: vi.fn(),
 }));
@@ -69,6 +71,33 @@ beforeEach(() => {
   analyzeFloorPlanImage.mockResolvedValue(LLM);
   getCachedReading.mockResolvedValue(null);
   getCredits.mockResolvedValue({ remaining: 5 });
+  floorPlanReadingsSince.mockResolvedValue(0);
+});
+
+describe("analyzeFloorPlan — input + spend guards", () => {
+  it("rejects a non-raster (e.g. SVG) image before any model call", async () => {
+    const res = await analyzeFloorPlan("data:image/svg+xml,<svg/>", "South", 2024);
+    expect(res.ok).toBe(false);
+    expect(analyzeFloorPlanImage).not.toHaveBeenCalled();
+    expect(reserveReading).not.toHaveBeenCalled();
+  });
+
+  it("rejects an oversized image (decoded > cap) before any model call", async () => {
+    const huge = "data:image/png;base64," + "A".repeat(4_000_000); // ~3MB decoded
+    const res = await analyzeFloorPlan(huge, "South", 2024);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error).toMatch(/too large/i);
+    expect(analyzeFloorPlanImage).not.toHaveBeenCalled();
+  });
+
+  it("trips the global daily circuit-breaker once the rolling cap is hit", async () => {
+    floorPlanReadingsSince.mockResolvedValue(999_999);
+    const res = await analyzeFloorPlan(IMG, "South", 2024);
+    expect(res.ok).toBe(false);
+    expect(analyzeFloorPlanImage).not.toHaveBeenCalled(); // no Kimi spend
+    expect(reserveReading).not.toHaveBeenCalled(); // no credit charged
+  });
 });
 
 describe("analyzeFloorPlan — deterministic engine wiring", () => {

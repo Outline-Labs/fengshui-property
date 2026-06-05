@@ -1,7 +1,7 @@
 import "server-only";
 
 import crypto from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 
 import { db, ensureSchema } from "./db";
 import { analyses, type Lead, leads } from "./db/schema";
@@ -256,6 +256,19 @@ export type Credits = {
   used: number;
   remaining: number;
 };
+
+/**
+ * How many floor-plan (vision-billed) readings have been reserved since `since`
+ * (epoch ms), across all leads — the input to the global daily spend ceiling.
+ */
+export async function floorPlanReadingsSince(since: number): Promise<number> {
+  await ensureSchema();
+  const r = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(analyses)
+    .where(and(eq(analyses.kind, "floor_plan"), gte(analyses.createdAt, since)));
+  return Number(r[0]?.n ?? 0);
+}
 
 export async function getCredits(leadId: string): Promise<Credits> {
   const lead = await getLead(leadId);

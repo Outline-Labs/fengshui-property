@@ -8,7 +8,17 @@ const AGENT_COOKIE = "fs_agent";
 const MAX_AGE = 60 * 60 * 24 * 180; // 180 days
 
 function secret(): string {
-  return process.env.SESSION_SECRET || "dev-insecure-secret-change-me";
+  const s = process.env.SESSION_SECRET;
+  if (s) return s;
+  // Fail closed in production: signing cookies with a public, guessable string
+  // would make every session forgeable (account takeover). Throwing surfaces a
+  // missing env var loudly on deploy instead of silently shipping it insecure.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "SESSION_SECRET is not set — refusing the insecure dev fallback in production.",
+    );
+  }
+  return "dev-insecure-secret-change-me";
 }
 
 function sign(value: string): string {

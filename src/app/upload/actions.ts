@@ -4,6 +4,7 @@ import { applyReferralActivation } from "@/lib/credits";
 import {
   type OtpResult,
   finalizeReading,
+  floorPlanReadingsSince,
   getCredits,
   releaseReading,
   requestOtp,
@@ -44,14 +45,31 @@ export type FloorPlanResult =
   | { ok: true; analysis: FloorPlanAnalysis; remaining: number }
   | { ok: false; error: string; code?: "no_session" | "out_of_credits" };
 
+// Server-side guard: the client resizes to a small JPEG, but a direct call could
+// bypass that, so allowlist real raster MIME types (no SVG) and cap the decoded
+// size — both bound the per-call Kimi cost and the abuse surface.
+const ALLOWED_IMAGE = /^data:image\/(png|jpe?g|webp);base64,/i;
+const MAX_IMAGE_BYTES = 2_500_000; // ~2.5 MB decoded; well above a resized plan
+
+function imageError(dataUrl: string): string | null {
+  if (!ALLOWED_IMAGE.test(dataUrl)) {
+    return "Please upload a PNG, JPG, or WEBP image (or a PDF).";
+  }
+  const comma = dataUrl.indexOf(",");
+  const approxBytes = Math.floor(((dataUrl.length - comma - 1) * 3) / 4);
+  if (approxBytes > MAX_IMAGE_BYTES) {
+    return "That image is too large — please use a smaller or lower-resolution floor plan.";
+  }
+  return null;
+}
+
 export async function analyzeFloorPlan(
   imageDataUrl: string,
   facing: string,
   yearBuilt?: number,
 ): Promise<FloorPlanResult> {
-  if (!imageDataUrl.startsWith("data:image/")) {
-    return { ok: false, error: "Please upload a valid image or PDF." };
-  }
+  const imgErr = imageError(imageDataUrl);
+  if (imgErr) return { ok: false, error: imgErr };
   if (!facing.trim()) {
     return { ok: false, error: "Please set which direction the unit faces." };
   }
@@ -71,6 +89,17 @@ export async function analyzeFloorPlan(
   if (cached) {
     const { remaining } = await getCredits(leadId);
     return { ok: true, analysis: cached, remaining };
+  }
+
+  // Global spend ceiling: cap vision-billed reads over a rolling 24h so a burst
+  // that slips past the per-IP firewall limit can't run the Kimi bill to
+  // infinity. A high default that normal launch traffic won't reach; tune via env.
+  const dailyCap = Number(process.env.MAX_DAILY_READINGS) || 2000;
+  if ((await floorPlanReadingsSince(Date.now() - 86_400_000)) >= dailyCap) {
+    return {
+      ok: false,
+      error: "Readings are paused briefly due to high demand — please try again soon.",
+    };
   }
 
   // Atomically claim a credit BEFORE the paid Kimi call so concurrent uploads
