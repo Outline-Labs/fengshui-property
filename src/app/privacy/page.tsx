@@ -13,8 +13,8 @@ export default function PrivacyPage() {
     <LegalShell
       title="Privacy Policy"
       cn="隐私政策"
-      updated="27 May 2026"
-      intro="This policy explains what personal data fengshuiai.sg (operated by Fengshui AI) collects, why, who we share it with, and the choices you have. It is written to comply with Singapore's Personal Data Protection Act (PDPA)."
+      updated="5 June 2026"
+      intro="This policy explains what personal data fengshuiai.sg (operated by Fengshui AI) collects, why, who we may share it with, and the choices you have. It is written to comply with Singapore's Personal Data Protection Act (PDPA)."
     >
       <LegalSection n="1" title="What we collect">
         <p>Depending on how you use the service, we may collect:</p>
@@ -24,24 +24,38 @@ export default function PrivacyPage() {
           you&rsquo;re interested in, and your buying timeline.
         </p>
         <p>
-          <strong>Floor plans</strong> — images or PDFs you upload for a
-          unit-level reading.
+          <strong>Content you provide</strong> — floor-plan images or PDFs you
+          upload, and the addresses or map points you analyse.
         </p>
         <p>
-          <strong>Property locations</strong> — the addresses and map points
-          you analyse.
+          <strong>Payment information</strong> — if you buy reading credits,
+          your payment is handled by our payment processor (Stripe). We receive
+          confirmation and limited details of the transaction; we do not collect
+          or store your full card number.
+        </p>
+        <p>
+          <strong>Referral information</strong> — if you take part in our
+          referral programme, the referral code or link used and the connection
+          between the person who referred you and your account, so we can award
+          credits.
         </p>
         <p>
           <strong>Usage data</strong> — basic, privacy-respecting analytics
-          (pages viewed, readings run). We do not use advertising trackers.
+          (pages viewed, readings run) and technical data such as your device
+          and approximate location from your IP address. We do not use
+          advertising trackers.
         </p>
       </LegalSection>
 
       <LegalSection n="2" title="How we use it">
+        <p>We use your personal data to:</p>
         <p>
-          To generate your fengshui readings; to operate your free account and
-          reading allowance; to improve the service; and — only if you ask for
-          it — to introduce you to a property specialist (see section 4).
+          provide, operate, maintain, personalise, and improve the service and
+          your readings; manage your account, reading allowance, credits, and
+          referrals; process payments; communicate with you about the service,
+          your readings, new features, and offers; understand how the service is
+          used; protect against fraud, abuse, and security risks; and for any
+          other purpose you consent to or that is permitted or required by law.
         </p>
       </LegalSection>
 
@@ -54,32 +68,47 @@ export default function PrivacyPage() {
           Republic of China and its servers may be located outside Singapore.
         </p>
         <p>
-          By uploading a floor plan you consent to this transfer. We take
-          reasonable steps so that overseas processing affords a standard of
-          protection comparable to the PDPA, and we transmit only what is needed
-          for the reading. Your floor plan is processed in the moment and is not
-          stored on our own servers afterwards.
+          By uploading a floor plan you consent to this transfer. More generally,
+          some of our service providers may store or process data outside
+          Singapore. Where we transfer personal data overseas, we take
+          reasonable steps so that it receives a standard of protection
+          comparable to the PDPA, and we transmit only what is needed. Your floor
+          plan is processed in the moment and is not stored on our own servers
+          afterwards.
         </p>
       </LegalSection>
 
-      <LegalSection n="4" title="Sharing with property specialists">
+      <LegalSection n="4" title="Who we share it with">
+        <p>We do not sell your personal data. We may share it with:</p>
         <p>
-          Fengshui AI is free because we may connect interested buyers with
-          licensed property agents. If you provide your phone number and ask to
-          be matched with a specialist, we share your name, contact details, and
-          the property you&rsquo;re considering with a vetted, CEA-registered
-          agent in that area. We do not share your data with agents unless you
-          take that step. You can decline or withdraw at any time (section 7).
+          <strong>Service providers and partners</strong> — organisations that
+          process data on our behalf or help us operate, secure, improve, market,
+          and provide the service, such as hosting, payment processing,
+          analytics, communications, and AI processing. They may use your data
+          only for those purposes.
+        </p>
+        <p>
+          <strong>At your request or with your consent</strong> — third parties
+          you ask us to share your information with, or where you have otherwise
+          given consent.
+        </p>
+        <p>
+          <strong>Legal and corporate</strong> — where required or permitted by
+          law, to enforce our terms, to protect rights, safety, and property, or
+          in connection with a merger, acquisition, financing, reorganisation, or
+          sale of assets, in which case your data may be among the assets
+          transferred.
         </p>
       </LegalSection>
 
       <LegalSection n="5" title="Retention">
         <p>
           Floor-plan images are not retained after a reading is generated.
-          Account details and the metadata of your readings (score, date,
-          facing) are kept while your account is active and for a reasonable
-          period afterwards, then deleted or anonymised. You may request earlier
-          deletion at any time.
+          Account details, reading metadata (score, date, facing), and credit and
+          referral records are kept while your account is active and for a
+          reasonable period afterwards, or as required for legal, accounting, or
+          fraud-prevention purposes, then deleted or anonymised. You may request
+          earlier deletion at any time.
         </p>
       </LegalSection>
 
@@ -95,12 +124,12 @@ export default function PrivacyPage() {
         <p>
           Under the PDPA you may request access to, or correction of, the
           personal data we hold about you, and you may withdraw your consent to
-          our collection, use, or disclosure of it (including withdrawing from
-          agent introductions). Email{" "}
+          our collection, use, or disclosure of it. Email{" "}
           <a href="mailto:privacy@fengshuiai.sg" className="text-cinnabar hover:underline">
             privacy@fengshuiai.sg
           </a>{" "}
-          and we will respond within a reasonable time.
+          and we will respond within a reasonable time. Withdrawing certain
+          consents may mean we can no longer provide parts of the service.
         </p>
       </LegalSection>
 
