@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { SiteMasthead } from "@/components/site-masthead";
 import { getCredits } from "@/lib/leads";
+import { partnersEnabled } from "@/lib/partners";
 import { MAX_QUOTA } from "@/lib/quota";
 import { getLeadId } from "@/lib/session";
 
@@ -28,6 +29,7 @@ export default async function UploadPage() {
         remaining={remaining}
         quota={quota}
         canUpgrade={quota < MAX_QUOTA}
+        specialistEnabled={partnersEnabled()}
         specialistRequested={lead.wantsAgent === 1}
         specialistPhone={lead.phone}
       />
