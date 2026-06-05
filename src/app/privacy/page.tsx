@@ -125,8 +125,8 @@ export default function PrivacyPage() {
           Under the PDPA you may request access to, or correction of, the
           personal data we hold about you, and you may withdraw your consent to
           our collection, use, or disclosure of it. Email{" "}
-          <a href="mailto:privacy@fengshuiai.sg" className="text-cinnabar hover:underline">
-            privacy@fengshuiai.sg
+          <a href="mailto:hello@fengshuiai.sg" className="text-cinnabar hover:underline">
+            hello@fengshuiai.sg
           </a>{" "}
           and we will respond within a reasonable time. Withdrawing certain
           consents may mean we can no longer provide parts of the service.
@@ -146,8 +146,8 @@ export default function PrivacyPage() {
         <p>
           We may update this policy; material changes will be reflected by the
           date above. Our Data Protection Officer can be reached at{" "}
-          <a href="mailto:dpo@fengshuiai.sg" className="text-cinnabar hover:underline">
-            dpo@fengshuiai.sg
+          <a href="mailto:hello@fengshuiai.sg" className="text-cinnabar hover:underline">
+            hello@fengshuiai.sg
           </a>
           . For PDPA-specific matters, see our{" "}
           <a href="/pdpa" className="text-cinnabar hover:underline">
