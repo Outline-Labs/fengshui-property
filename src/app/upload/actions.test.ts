@@ -13,10 +13,12 @@ vi.mock("@/lib/session", () => ({ getLeadId: () => getLeadId() }));
 const reserveReading = vi.fn(async () => ({ ok: true, id: "res-1", remaining: 2 }));
 const finalizeReading = vi.fn(async () => {});
 const releaseReading = vi.fn(async () => {});
+const getCredits = vi.fn(async () => ({ remaining: 5 }));
 vi.mock("@/lib/leads", () => ({
   reserveReading: (...a: unknown[]) => reserveReading(...a),
   finalizeReading: (...a: unknown[]) => finalizeReading(...a),
   releaseReading: (...a: unknown[]) => releaseReading(...a),
+  getCredits: (...a: unknown[]) => getCredits(...a),
   requestOtp: vi.fn(),
   verifyOtpAndRequestAgent: vi.fn(),
 }));
@@ -28,9 +30,17 @@ vi.mock("@/lib/kimi", () => ({
   analyzeFloorPlanImage: (p: unknown) => analyzeFloorPlanImage(p),
 }));
 
+const getCachedReading = vi.fn<() => Promise<unknown>>(async () => null);
+const putCachedReading = vi.fn(async () => {});
+vi.mock("@/lib/reading-cache", () => ({
+  readingKey: () => "test-key",
+  getCachedReading: () => getCachedReading(),
+  putCachedReading: (...a: unknown[]) => putCachedReading(...a),
+}));
+
 import { computeUnitReading } from "@/lib/fengshui/unit-reading";
 
-import { analyzeFloorPlan } from "./actions";
+import { analyzeFloorPlan, recomputeReading } from "./actions";
 
 const IMG = "data:image/png;base64,AAAA";
 
@@ -57,6 +67,8 @@ beforeEach(() => {
   getLeadId.mockResolvedValue("lead-1");
   reserveReading.mockResolvedValue({ ok: true, id: "res-1", remaining: 2 });
   analyzeFloorPlanImage.mockResolvedValue(LLM);
+  getCachedReading.mockResolvedValue(null);
+  getCredits.mockResolvedValue({ remaining: 5 });
 });
 
 describe("analyzeFloorPlan — deterministic engine wiring", () => {
@@ -88,5 +100,42 @@ describe("analyzeFloorPlan — deterministic engine wiring", () => {
         (f) => f.principle === "八宅" || f.principle === "玄空飞星",
       ),
     ).toBe(true); // engine-computed verdicts present
+  });
+
+  it("returns a cached reading verbatim — no model call, no credit charge", async () => {
+    const cached = {
+      score: 6.4,
+      summary: "previously read",
+      facing: "South",
+      confidence: "high" as const,
+      rooms: [],
+      factors: [],
+      recommendations: [],
+    };
+    getCachedReading.mockResolvedValue(cached);
+
+    const res = await analyzeFloorPlan(IMG, "South", 2024);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.analysis).toEqual(cached);
+    expect(analyzeFloorPlanImage).not.toHaveBeenCalled(); // no vision model
+    expect(reserveReading).not.toHaveBeenCalled(); // no credit reserved
+  });
+});
+
+describe("recomputeReading — deterministic re-read of a confirmed layout", () => {
+  it("recomputes the engine for the edited rooms with no model call or credit", async () => {
+    const rooms = [
+      { name: "Kitchen", sector: "SE" },
+      { name: "Bathroom", sector: "SW" },
+    ];
+    const res = await recomputeReading("South", 2024, rooms);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const det = computeUnitReading("S", 2024, rooms);
+    expect(res.score).toBe(det.score);
+    expect(res.engine.group).toBe("东四宅");
+    expect(analyzeFloorPlanImage).not.toHaveBeenCalled();
+    expect(reserveReading).not.toHaveBeenCalled();
   });
 });

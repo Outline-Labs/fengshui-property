@@ -84,6 +84,15 @@ export function ensureSchema(): Promise<void> {
           created_at INTEGER NOT NULL
         )
       `);
+      // Content-addressed reading cache (same plan → same reading; see
+      // lib/reading-cache.ts). Keyed by sha256(dataUrl|facing|year).
+      await client.execute(`
+        CREATE TABLE IF NOT EXISTS reading_cache (
+          key TEXT PRIMARY KEY,
+          analysis TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        )
+      `);
       await client.execute(`
         CREATE TABLE IF NOT EXISTS agents (
           id TEXT PRIMARY KEY,
