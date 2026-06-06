@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope, Noto_Serif_SC } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
+
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -51,7 +53,13 @@ export default function RootLayout({
       lang="en"
       className={`${fraunces.variable} ${manrope.variable} ${notoSerifSC.variable}`}
     >
-      <body className="min-h-screen flex flex-col antialiased">{children}</body>
+      <body className="min-h-screen flex flex-col antialiased">
+        {children}
+        {/* Cookieless, aggregate page analytics (top-of-funnel). Enable in
+            Vercel → Project → Analytics. No PII / no ad trackers — consistent
+            with the privacy policy. */}
+        <Analytics />
+      </body>
     </html>
   );
 }
