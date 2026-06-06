@@ -110,3 +110,51 @@ export function computeFlyingStars(facing: Dir8, year?: number): FlyingStarChart
 
 export const PERIOD_9_FAVOURABLE = new Set([9, 1, 8]);
 export const PERIOD_9_INAUSPICIOUS = new Set([2, 5]);
+
+const DIR8_ALIASES: Record<string, Dir8> = {
+  n: "N", north: "N", ne: "NE", northeast: "NE", e: "E", east: "E",
+  se: "SE", southeast: "SE", s: "S", south: "S", sw: "SW", southwest: "SW",
+  w: "W", west: "W", nw: "NW", northwest: "NW",
+};
+
+/** Normalise an 8-direction code ("NE") or label ("Northeast") to a Dir8; null otherwise. */
+export function dir8FromString(s: string): Dir8 | null {
+  return DIR8_ALIASES[s.trim().toLowerCase()] ?? null;
+}
+
+/**
+ * Timeliness of a single star in a given period (Period 9 by default). The
+ * reigning star (当令) is strongest; 5-yellow (五黄) and 2-black (二黑) are the
+ * standing misfortune stars regardless of period.
+ */
+export function starQuality(star: number, period = 9): number {
+  if (star === period) return 2; // 当令最旺
+  if (star === 5) return -2; // 五黄 — worst
+  if (star === 2) return -1; // 二黑病符
+  if (period === 9) return PERIOD_9_FAVOURABLE.has(star) ? 1 : 0; // 1,8 are 生气/进气
+  return 0;
+}
+
+export type PalaceVerdict = {
+  direction: Dir8;
+  mountain: number;
+  facing: number;
+  level: number; // mountain quality + facing quality, ~[-4, 4]
+  flags: string[]; // notable conditions, e.g. "五黄", "二五交加"
+};
+
+/** Judge one palace (direction) from its mountain (山) and facing (向) stars. */
+export function palaceVerdict(chart: FlyingStarChart, dir: Dir8): PalaceVerdict {
+  const cell = chart.cells.find((c) => c.palace === dir);
+  if (!cell) {
+    return { direction: dir, mountain: 0, facing: 0, level: 0, flags: [] };
+  }
+  const level =
+    starQuality(cell.mountain, chart.period) +
+    starQuality(cell.facing, chart.period);
+  const flags: string[] = [];
+  const pair = new Set([cell.mountain, cell.facing]);
+  if (pair.has(5)) flags.push("五黄");
+  if (pair.has(2) && pair.has(5)) flags.push("二五交加");
+  return { direction: dir, mountain: cell.mountain, facing: cell.facing, level, flags };
+}

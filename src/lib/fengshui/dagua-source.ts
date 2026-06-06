@@ -85,15 +85,19 @@ export type HexSourceMeta = {
 };
 
 /**
- * Per-hexagram source metadata transcribed from table B.
+ * Per-hexagram source metadata transcribed from table B (raw provenance record).
  *
- * The numbers have since been DECODED into a rule (see dagua.ts guaYun /
- * indexCode): indexTop = XT_LS[upper]·10 + XT_LS[lower] (verified 64/64), and
- * 卦運 = 10 − XT_LS[upper]. The rule reproduced 62/64 of the transcribed 卦運 and
- * exposed the 2 OCR errors the 合十 law flagged — now CORRECTED below (地山谦
- * 6→9, 水山蹇 7→3). `dagua.guaYun()` is the canonical (rule-derived) value;
- * this table is the raw record. indexBottom remains a noisy, undecoded
- * secondary coordinate (kept verbatim, unused).
+ * `indexTop` is decoded and canonical: XT_LS[upper]·10 + XT_LS[lower] (verified
+ * 64/64), and drives the ring. `indexBottom` is a noisy, undecoded secondary
+ * coordinate (kept verbatim, unused).
+ *
+ * ⚠️ `guaYun` here is the digit printed in the source IMAGE's 卦運 column, kept
+ * only for provenance — it is NOT the engine's 卦運. The engine computes 卦運 by
+ * 归藏 in `dagua.guaYun()` (the practitioner's lineage rule); the image's column
+ * follows a DIFFERENT convention and disagrees with 归藏 for most hexagrams. Do
+ * NOT use this field for computation. (The two values we had earlier doctored
+ * toward the wrong 10 − upper rule — 地山谦→9, 水山蹇→3 — are reverted to the raw
+ * transcription below.)
  */
 export const HEX_SOURCE: Readonly<Record<string, HexSourceMeta>> = {
   "风天小畜": { indexTop: 29, indexBottom: 84, guaYun: 8 },
@@ -132,9 +136,9 @@ export const HEX_SOURCE: Readonly<Record<string, HexSourceMeta>> = {
   "火地晋": { indexTop: 31, indexBottom: 36, guaYun: 7 },
   "泽地萃": { indexTop: 41, indexBottom: 47, guaYun: 6 },
   "天地否": { indexTop: 91, indexBottom: 96, guaYun: 1 },
-  "地山谦": { indexTop: 16, indexBottom: 67, guaYun: 9 }, // 卦運 OCR-corrected 6→9 (rule)
+  "地山谦": { indexTop: 16, indexBottom: 67, guaYun: 6 }, // raw transcription (归藏 卦運 = 6)
   "艮为山": { indexTop: 66, indexBottom: 18, guaYun: 4 },
-  "水山蹇": { indexTop: 76, indexBottom: 27, guaYun: 3 }, // 卦運 OCR-corrected 7→3 (rule)
+  "水山蹇": { indexTop: 76, indexBottom: 27, guaYun: 7 }, // raw transcription (归藏 卦運 = 2)
   "风山渐": { indexTop: 26, indexBottom: 78, guaYun: 8 },
   "雷山小过": { indexTop: 86, indexBottom: 37, guaYun: 2 },
   "火山旅": { indexTop: 36, indexBottom: 89, guaYun: 7 },

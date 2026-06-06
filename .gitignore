@@ -47,3 +47,8 @@ data/*.db-*
 
 # practitioner source charts (provenance for the Da Gua engine; not shipped)
 /Fengshui Source/
+.env.local
+
+# PostHog setup-wizard artifacts (local, regenerable — not app source)
+posthog-setup-report.md
+.claude/skills/integration-nextjs-app-router/

@@ -90,6 +90,16 @@ export type FloorPlanRecommendation = {
   detail: string;
 };
 
+// Summary of the deterministic engine (Flying Stars + Eight Mansions) that
+// produces the score — surfaced so the UI can show it's computed, not opined.
+export type UnitEngineSummary = {
+  period: number;
+  group: "东四宅" | "西四宅";
+  houseGua: string;
+  auspicious: string[]; // 八宅 吉方 directions
+  inauspicious: string[]; // 八宅 凶方 directions
+};
+
 export type FloorPlanAnalysis = {
   score: number;
   summary: string;
@@ -98,6 +108,9 @@ export type FloorPlanAnalysis = {
   factors: FloorPlanFactor[];
   recommendations: FloorPlanRecommendation[];
   confidence: "high" | "medium" | "low";
+  // Present when the score was computed by the deterministic engine (the LLM
+  // then only supplied perception + form-school notes).
+  engine?: UnitEngineSummary;
 };
 
 export type FormSchoolAnalysis = {

@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { useRef, useState } from "react";
 
 import { FlyingStarsGrid } from "@/components/flying-stars-grid";
@@ -11,9 +12,14 @@ import {
   type FlyingStarChart,
 } from "@/lib/fengshui/flying-stars";
 import type { ReadingPack } from "@/lib/stripe";
-import type { FloorPlanAnalysis, FloorPlanFactor } from "@/lib/types";
+import type {
+  FloorPlanAnalysis,
+  FloorPlanFactor,
+  FloorPlanRoom,
+  UnitEngineSummary,
+} from "@/lib/types";
 
-import { analyzeFloorPlan } from "./actions";
+import { analyzeFloorPlan, recomputeReading } from "./actions";
 import { buyReadingsAction } from "./credits-actions";
 
 type CreditProps = {
@@ -347,6 +353,9 @@ export function UploadClient({
                       )
                     : null
                 }
+                facing={facing}
+                year={year ? Number(year) : undefined}
+                onUpdate={setAnalysis}
                 specialistEnabled={specialistEnabled}
                 specialistRequested={specialistRequested}
                 specialistPhone={specialistPhone}
@@ -380,6 +389,9 @@ function ReportPlaceholder() {
 function Report({
   analysis,
   chart,
+  facing,
+  year,
+  onUpdate,
   specialistEnabled,
   specialistRequested,
   specialistPhone,
@@ -388,6 +400,9 @@ function Report({
 }: {
   analysis: FloorPlanAnalysis;
   chart: FlyingStarChart | null;
+  facing: string;
+  year: number | undefined;
+  onUpdate: (a: FloorPlanAnalysis) => void;
   specialistEnabled: boolean;
   specialistRequested: boolean;
   specialistPhone: string | null;
@@ -406,7 +421,7 @@ function Report({
         </div>
         <div className="border-t-2 border-ink pt-4 flex items-baseline gap-4">
           <span className={`numeral text-[5rem] leading-[0.85] ${tone(analysis.score)}`}>
-            {analysis.score.toFixed(1)}
+            {Math.round(analysis.score)}
           </span>
           <span className="text-2xl text-muted font-display">/ 10</span>
         </div>
@@ -414,6 +429,8 @@ function Report({
           <p className="mt-4 text-ink-soft leading-relaxed">{analysis.summary}</p>
         )}
       </div>
+
+      {analysis.engine && <EightMansions engine={analysis.engine} />}
 
       {chart && (
         <section>
@@ -431,25 +448,12 @@ function Report({
         </section>
       )}
 
-      {analysis.rooms.length > 0 && (
-        <section>
-          <SectionHead n="" title="Rooms read" cn="格局" />
-          <div className="flex flex-wrap gap-2">
-            {analysis.rooms.map((r, i) => (
-              <span
-                key={i}
-                className="inline-flex items-baseline gap-2 border border-line px-3 py-1.5 text-sm"
-                title={r.note}
-              >
-                <span className="text-ink">{r.name}</span>
-                <span className="text-[10px] tracking-wide uppercase text-cinnabar">
-                  {r.sector}
-                </span>
-              </span>
-            ))}
-          </div>
-        </section>
-      )}
+      <ConfirmLayout
+        analysis={analysis}
+        facing={facing}
+        year={year}
+        onUpdate={onUpdate}
+      />
 
       {positives.length > 0 && (
         <FactorList title="What strengthens this unit" cn="得" factors={positives} accent="jade" />
@@ -501,6 +505,162 @@ function Report({
         </button>
       </div>
     </div>
+  );
+}
+
+const SECTOR_OPTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "center", "—"];
+
+// The reproducibility fix: the score is computed from where each room sits, but
+// the room→sector read is the model's (fuzzy) perception. Let the user confirm/
+// correct it, then recompute deterministically — no model call, no credit.
+function ConfirmLayout({
+  analysis,
+  facing,
+  year,
+  onUpdate,
+}: {
+  analysis: FloorPlanAnalysis;
+  facing: string;
+  year: number | undefined;
+  onUpdate: (a: FloorPlanAnalysis) => void;
+}) {
+  const [rooms, setRooms] = useState<FloorPlanRoom[]>(analysis.rooms);
+  const [busy, setBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  const edit = (i: number, patch: Partial<FloorPlanRoom>) => {
+    setRooms((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+    setDirty(true);
+  };
+  const remove = (i: number) => {
+    setRooms((rs) => rs.filter((_, j) => j !== i));
+    setDirty(true);
+  };
+  const add = () => {
+    setRooms((rs) => [...rs, { name: "Room", sector: "center" }]);
+    setDirty(true);
+  };
+
+  const apply = async () => {
+    setBusy(true);
+    const res = await recomputeReading(facing, year, rooms);
+    setBusy(false);
+    if (!res.ok) return;
+    const formSchool = analysis.factors.filter((f) => f.principle === "峦头");
+    onUpdate({
+      ...analysis,
+      rooms,
+      score: res.score,
+      factors: [...res.factors, ...formSchool],
+      engine: res.engine,
+    });
+    setDirty(false);
+    posthog.capture("reading_layout_confirmed", {
+      facing,
+      year_built: year,
+      room_count: rooms.length,
+      new_score: res.score,
+    });
+  };
+
+  return (
+    <section>
+      <SectionHead n="" title="Confirm the layout" cn="格局" />
+      <p className="text-xs text-muted leading-relaxed mb-4 max-w-md">
+        We read these rooms from your plan, and the score is computed from where
+        each one sits. If we placed a room in the wrong sector, fix it and re-read
+        — it&rsquo;s instant and costs no credit.
+      </p>
+      <div className="space-y-2">
+        {rooms.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              value={r.name}
+              onChange={(e) => edit(i, { name: e.target.value })}
+              className="flex-1 min-w-0 bg-transparent border-b border-line focus:border-cinnabar py-1.5 text-sm focus:outline-none"
+            />
+            <select
+              value={SECTOR_OPTIONS.includes(r.sector) ? r.sector : "—"}
+              onChange={(e) => edit(i, { sector: e.target.value })}
+              className="bg-transparent border border-line py-1.5 px-2 text-sm focus:outline-none focus:border-cinnabar text-ink"
+            >
+              {SECTOR_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => remove(i)}
+              aria-label="Remove room"
+              className="text-muted hover:text-cinnabar px-1"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex items-center gap-6">
+        <button onClick={add} className="text-sm text-ink-soft hover:text-cinnabar">
+          + Add room
+        </button>
+        {dirty && (
+          <button
+            onClick={apply}
+            disabled={busy}
+            className="font-display text-base text-cinnabar inline-flex items-center gap-2 hover:gap-3 transition-all disabled:opacity-40"
+          >
+            {busy ? "Re-reading…" : "Update reading"} <span aria-hidden>→</span>
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function EightMansions({ engine }: { engine: UnitEngineSummary }) {
+  return (
+    <section>
+      <SectionHead n="" title="Eight Mansions" cn="八宅" />
+      <p className="text-sm text-ink-soft leading-relaxed">
+        A <span className="text-ink">{engine.houseGua} house</span> ({engine.group}),
+        read for Period {engine.period}. Favour the auspicious sectors for
+        bedrooms, the stove, and where you spend your waking hours — and keep
+        bathrooms and storage in the inauspicious ones.
+      </p>
+      <div className="mt-4 grid grid-cols-2 gap-5">
+        <div>
+          <div className="text-[10px] tracking-[0.3em] uppercase text-jade mb-2">
+            吉 · Auspicious
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {engine.auspicious.map((d) => (
+              <span
+                key={d}
+                className="border border-jade/50 text-jade px-2.5 py-1 text-xs"
+              >
+                {d}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] tracking-[0.3em] uppercase text-cinnabar mb-2">
+            凶 · Inauspicious
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {engine.inauspicious.map((d) => (
+              <span
+                key={d}
+                className="border border-cinnabar/40 text-cinnabar px-2.5 py-1 text-xs"
+              >
+                {d}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -615,6 +775,7 @@ function ReferralInvite({
       await navigator.clipboard.writeText(referralUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
+      posthog.capture("referral_link_copied");
     } catch {
       // clipboard blocked — the input is selectable as a fallback
     }

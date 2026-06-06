@@ -4,7 +4,6 @@ import type { Coords } from "./types";
 import {
   bearingDegrees,
   bearingToCardinal,
-  bearingToMountain,
   distanceMeters,
   pointsWithinRadius,
 } from "./geo";
@@ -113,35 +112,6 @@ describe("bearingToCardinal", () => {
     expect(bearingToCardinal(337.4)).toBe("NW");
     expect(bearingToCardinal(337.6)).toBe("N");
     expect(bearingToCardinal(359.9)).toBe("N");
-  });
-});
-
-describe("bearingToMountain (24-mountain compass)", () => {
-  // Each mountain spans 15 degrees, centred on multiples of 15 starting at 0.
-  // Mountain 0 (壬) spans [352.5, 7.5); 子 (true-north mountain) spans
-  // [7.5, 22.5); and so on. Expected indices computed independently.
-  it("places true north (0 deg) in the 壬 mountain that straddles north", () => {
-    expect(bearingToMountain(0)).toBe("壬");
-    expect(bearingToMountain(7.49)).toBe("壬");
-    expect(bearingToMountain(355)).toBe("壬");
-  });
-
-  it("enters 子 (Zi) at 7.5 degrees and exits at 22.5", () => {
-    expect(bearingToMountain(7.5)).toBe("子");
-    expect(bearingToMountain(22.49)).toBe("子");
-    expect(bearingToMountain(22.5)).toBe("癸");
-  });
-
-  it("maps the cardinal-centre mountains", () => {
-    // 甲 at ~90 (E), 丙 at ~180 (S), 庚 at ~270 (W).
-    expect(bearingToMountain(90)).toBe("甲");
-    expect(bearingToMountain(180)).toBe("丙");
-    expect(bearingToMountain(270)).toBe("庚");
-  });
-
-  it("wraps just below 352.5 back into the 壬 mountain", () => {
-    expect(bearingToMountain(352.5)).toBe("壬");
-    expect(bearingToMountain(352.49)).toBe("亥");
   });
 });
 

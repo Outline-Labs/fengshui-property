@@ -60,6 +60,16 @@ export const analyses = sqliteTable("analyses", {
   createdAt: integer("created_at").notNull(),
 });
 
+// Content-addressed cache of a completed floor-plan reading, keyed by a hash of
+// (image data URL + facing + year). The same upload returns the same reading
+// instead of re-running the non-deterministic vision model — so a re-upload of
+// the same plan scores identically, and we don't re-bill an identical read.
+export const readingCache = sqliteTable("reading_cache", {
+  key: text("key").primaryKey(), // sha256(dataUrl|facing|year)
+  analysis: text("analysis").notNull(), // JSON FloorPlanAnalysis
+  createdAt: integer("created_at").notNull(),
+});
+
 export const agents = sqliteTable("agents", {
   id: text("id").primaryKey(),
   email: text("email").notNull().unique(),

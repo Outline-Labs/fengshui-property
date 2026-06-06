@@ -26,7 +26,7 @@ Set these in **Vercel → Project → Settings → Environment Variables** (Prod
 
 | Variable | Required? | Where to get it |
 |---|---|---|
-| `SESSION_SECRET` | **Yes** | `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Never reuse the dev value. |
+| `SESSION_SECRET` | **Yes** | `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`. Never reuse the dev value. **The app now throws in production if this is unset** (rather than silently signing forgeable cookies) — so a missing value fails the deploy loudly. |
 | `DATABASE_URL` / `TURSO_DATABASE_URL` | **Yes** | Auto-wired by the Vercel→Turso integration (`libsql://…turso.io`). App reads either name. |
 | `DATABASE_AUTH_TOKEN` / `TURSO_AUTH_TOKEN` | **Yes** | Auto-wired alongside the URL. App reads either name. |
 | `MOONSHOT_API_KEY` | **Yes** | platform.moonshot.ai — floor-plan vision (Tier 2) |
@@ -40,6 +40,8 @@ Set these in **Vercel → Project → Settings → Environment Variables** (Prod
 | `STRIPE_SECRET_KEY` | Launch | Stripe Dashboard (test mode `sk_test_…` pre-launch). Absent ⇒ dev credits top-ups instantly; **prod fails closed** (no top-ups). |
 | `STRIPE_WEBHOOK_SECRET` | Launch | `whsec_…` from `stripe listen` or the Dashboard webhook endpoint — verifies events at `/api/stripe/webhook`. |
 | `PARTNERS_ENABLED` | No | Agent-surface kill switch. **Leave UNSET in production** (consumer-only v1 → surface off). Set `true` to enable the dashboard on a deploy. |
+| `MAX_DAILY_READINGS` | No | Global rolling-24h ceiling on floor-plan (Kimi-billed) reads — a runaway-cost circuit breaker on top of the per-IP firewall limit. Default `2000`; lower it if you see abuse. |
+| `CONSUMER_HOSTS` | No | Allowlisted hosts for building Stripe Checkout return URLs. Default covers `fengshuiai.sg`, `www.`, and the `*.vercel.app` deploy. |
 | `ONEMAP_TOKEN` | No | Static-token fallback; only used if email/password are unset |
 | `DATA_GOV_SG_API_KEY`, `LTA_ACCOUNT_KEY` | No | Offline `pnpm data:pois` only — POIs are baked into `data/pois.json` |
 
@@ -106,6 +108,24 @@ proxy). Subscribe to **`checkout.session.completed`** and copy the endpoint's
 signing secret into `STRIPE_WEBHOOK_SECRET`. Locally:
 `stripe listen --forward-to localhost:3000/api/stripe/webhook` prints a dev
 `whsec_…`. Switch the `sk_test_…`/`whsec_…` pair to live keys before real traffic.
+
+### 7 — Rate limiting (Vercel Firewall) — **required before public launch**
+Each floor-plan reading is a *paid* vision-model call, and signup is email-only
+(unverified), so the front door must be throttled or someone can script
+throwaway accounts into unbounded Kimi spend. Two layers, both needed:
+
+1. **Per-IP limits — Vercel → Project → Firewall → Configure → add Rate Limit rules:**
+   - `POST` to `/upload` (the floor-plan reading Server Action) → e.g. **10 / minute / IP**, action *Deny* (or *Challenge*).
+   - `POST` to `/signup` → e.g. **5 / minute / IP**.
+   - (Optional) `/map` Server Action POSTs → a looser limit; it's deterministic and unpaid, but caps scraping.
+   Tune the numbers to real usage; start strict and relax. Vercel's managed
+   ruleset + DDoS protection should also be on.
+2. **Global circuit breaker (in code, already shipped):** `MAX_DAILY_READINGS`
+   caps total Kimi-billed reads over a rolling 24h, so a distributed burst that
+   rotates IPs past the firewall still can't run the bill away. Default 2000.
+
+Also confirm `maxDuration = 60` is honored (set on `/upload`) so slow-but-valid
+readings don't 504 at the platform default.
 
 ---
 

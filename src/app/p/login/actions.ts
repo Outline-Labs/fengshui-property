@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { getApprovedAgentByEmail } from "@/lib/agents";
 import { sendEmail } from "@/lib/email";
+import { getPostHogClient } from "@/lib/posthog-server";
 import { safePartnerHost } from "@/lib/partner-hosts";
 import { createMagicToken } from "@/lib/session";
 
@@ -28,6 +29,16 @@ export async function agentLogin(formData: FormData) {
       "Your Fengshui AI Partners sign-in link",
       `Sign in to your partner dashboard:\n\n${link}\n\nThis link expires in 15 minutes. If you didn't request it, ignore this email.`,
     );
+  }
+
+  const ph = getPostHogClient();
+  if (ph && agent) {
+    ph.capture({
+      distinctId: agent.id,
+      event: "agent_login_requested",
+      properties: { email },
+    });
+    await ph.flush(); // deliver before the action redirects (serverless)
   }
 
   // Always report "sent" — never reveal whether an email is a registered agent.

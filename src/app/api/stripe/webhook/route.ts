@@ -1,4 +1,5 @@
 import { grantReadings } from "@/lib/credits";
+import { getPostHogClient } from "@/lib/posthog-server";
 import { readingsForPackCents, stripe } from "@/lib/stripe";
 import { creditWallet } from "@/lib/wallet";
 
@@ -48,6 +49,20 @@ export async function POST(request: Request) {
               kind: "purchase",
               ref: session.id,
             });
+            const ph = getPostHogClient();
+            if (ph) {
+              ph.capture({
+                distinctId: leadId,
+                event: "reading_pack_purchased",
+                properties: {
+                  amount_cents: session.amount_total,
+                  readings,
+                  stripe_session_id: session.id,
+                  currency: session.currency,
+                },
+              });
+              await ph.flush(); // deliver before the handler returns (serverless)
+            }
           }
         } else if (agentId) {
           const topupCents = Number(session.metadata?.topupCents ?? 0);

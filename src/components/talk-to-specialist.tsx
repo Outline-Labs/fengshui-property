@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { useState } from "react";
 
 import { confirmSpecialist, requestSpecialistOtp } from "@/app/upload/actions";
@@ -59,6 +60,7 @@ export function TalkToSpecialist({
       return;
     }
     setDone(true);
+    posthog.capture("specialist_contact_requested");
   };
 
   return (

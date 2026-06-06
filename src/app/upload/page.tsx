@@ -19,6 +19,11 @@ export const metadata: Metadata = {
     "Upload your floor plan for a unit-level fengshui reading — form school, flying stars (Period 9), and eight mansions.",
 };
 
+// The floor-plan reading server action calls a vision model with a 60s timeout +
+// one retry; the page-level maxDuration governs all Server Actions on this route
+// so Vercel doesn't kill a slow-but-valid reading at the default (~10–15s) limit.
+export const maxDuration = 60;
+
 export default async function UploadPage({
   searchParams,
 }: {

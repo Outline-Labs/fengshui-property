@@ -17,10 +17,13 @@
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
+    "@vercel/analytics": "^2.0.1",
     "drizzle-orm": "^0.45.2",
     "maplibre-gl": "^5.24.0",
     "next": "16.2.6",
     "pdfjs-dist": "^5.7.284",
+    "posthog-js": "^1.381.0",
+    "posthog-node": "^5.36.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",

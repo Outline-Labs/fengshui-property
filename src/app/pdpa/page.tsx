@@ -37,8 +37,8 @@ export default function PdpaPage() {
         <p>
           Our DPO oversees PDPA compliance and handles your requests and
           complaints. Contact:{" "}
-          <a href="mailto:dpo@fengshuiai.sg" className="text-cinnabar hover:underline">
-            dpo@fengshuiai.sg
+          <a href="mailto:hello@fengshuiai.sg" className="text-cinnabar hover:underline">
+            hello@fengshuiai.sg
           </a>
           .
         </p>

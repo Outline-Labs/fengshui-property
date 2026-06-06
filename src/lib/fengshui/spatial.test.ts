@@ -4,6 +4,7 @@ import { buildChart, guaYun } from "./dagua";
 import { hexagramForBearing } from "./bearing";
 import {
   type FloorPlan,
+  INFERRED_RULES,
   PENDING_RULES,
   assembleReading,
   branchSectorForBearing,
@@ -111,16 +112,19 @@ describe("assembleReading — deterministic overlay, gated verdicts", () => {
       // 旺 ⟺ the sector hexagram's 卦運 == the period.
       expect(room.wangShuai.status === "旺").toBe(room.wangShuai.guaYun === 9);
     }
-    // living(N→复 運9) and bedroom(E→临 運9) are 旺/正神/wants 山;
-    // kitchen(W→遁 運1) is 衰/零神/wants 水 (the 财 direction).
-    const liv = r.rooms.find((x) => x.room.label === "living")!;
-    const kit = r.rooms.find((x) => x.room.label === "kitchen")!;
-    expect(liv.wangShuai.status).toBe("旺");
-    expect(liv.wangShuai.role).toBe("正神");
-    expect(liv.wangShuai.wants).toBe("山");
-    expect(kit.wangShuai.status).toBe("衰");
-    expect(kit.wangShuai.role).toBe("零神");
-    expect(kit.wangShuai.wants).toBe("水");
+    // Under 归藏 this plan's rooms are all off-period: N→复(運8), E→临(運4),
+    // W→遁(運4) — all 衰/退氣.
+    for (const room of r.rooms) {
+      expect(room.wangShuai.status).toBe("衰");
+      expect(room.wangShuai.role).toBe("退氣");
+      expect(room.wangShuai.wants).toBeNull();
+    }
+    // The 正神/山 and 零神/水 paths, exercised directly on the rule: 運9 (旺/正神/山)
+    // sits at 19.69° (风雷益); 運1 (零神/水) at 25.31° (震为雷).
+    const wang = INFERRED_RULES.sectorWangShuai(19.6875, 9);
+    expect(wang).toMatchObject({ status: "旺", role: "正神", wants: "山" });
+    const zero = INFERRED_RULES.sectorWangShuai(25.3125, 9);
+    expect(zero).toMatchObject({ status: "衰", role: "零神", wants: "水" });
   });
 
   it("derives 财位 = the 零神 (運1) directions, and placement verdicts", () => {
@@ -129,9 +133,10 @@ describe("assembleReading — deterministic overlay, gated verdicts", () => {
     for (const b of r.wealth.bearings) {
       expect(guaYun(hexagramForBearing(b))).toBe(1);
     }
-    // a door in a 旺 sector (N→复 運9) is favourable
+    // the door sits in N (复, 運8) → 衰, so it is NOT a favourable door placement
+    // (under 归藏; it read 旺 under the old 10−upper rule).
     const door = r.placements.find((p) => p.feature === "door")!;
-    expect(door.favorable).toBe(true);
+    expect(door.favorable).toBe(false);
     expect(r.inferred).toBe(true);
   });
 

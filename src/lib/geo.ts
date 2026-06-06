@@ -55,39 +55,9 @@ export function bearingToCardinal(bearing: number): CardinalDirection {
   return CARDINALS[Math.floor(((bearing + 22.5) % 360) / 45)];
 }
 
-const MOUNTAINS_24 = [
-  "壬",
-  "子",
-  "癸",
-  "丑",
-  "艮",
-  "寅",
-  "甲",
-  "卯",
-  "乙",
-  "辰",
-  "巽",
-  "巳",
-  "丙",
-  "午",
-  "丁",
-  "未",
-  "坤",
-  "申",
-  "庚",
-  "酉",
-  "辛",
-  "戌",
-  "乾",
-  "亥",
-] as const;
-
-export type Mountain = (typeof MOUNTAINS_24)[number];
-
-export function bearingToMountain(bearing: number): Mountain {
-  const idx = Math.floor(((bearing - 352.5 + 360) % 360) / 15);
-  return MOUNTAINS_24[idx];
-}
+// (A 24-mountain bearing table used to live here but was an orphaned, non-standard
+// duplicate — 壬 straddling north instead of 子. The canonical 24-mountain ring
+// lives in fengshui/bearing.ts, used by the Da Gua engine.)
 
 export function pointsWithinRadius<T extends Coords>(
   center: Coords,

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 
 import { grantReadings } from "@/lib/credits";
 import { safeConsumerHost } from "@/lib/consumer-hosts";
+import { getPostHogClient } from "@/lib/posthog-server";
 import { getLeadId } from "@/lib/session";
 import { readingsForPackCents, stripe } from "@/lib/stripe";
 
@@ -64,5 +65,20 @@ export async function buyReadingsAction(formData: FormData) {
   });
 
   if (!session.url) redirect("/upload?error=billing_unavailable");
+
+  const ph = getPostHogClient();
+  if (ph) {
+    ph.capture({
+      distinctId: leadId,
+      event: "reading_pack_checkout_started",
+      properties: {
+        amount_cents: cents,
+        readings,
+        stripe_session_id: session.id,
+      },
+    });
+    await ph.flush(); // deliver before the action redirects (serverless)
+  }
+
   redirect(session.url);
 }

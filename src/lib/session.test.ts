@@ -15,6 +15,21 @@ const { createMagicToken, readMagicToken } = await import("./session");
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
+});
+
+describe("SESSION_SECRET — fail closed in production", () => {
+  it("throws (never uses the insecure dev fallback) when unset in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SESSION_SECRET", "");
+    expect(() => createMagicToken("a")).toThrow(/SESSION_SECRET/);
+  });
+
+  it("uses the configured secret in production when set", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("SESSION_SECRET", "a-real-production-secret");
+    expect(() => createMagicToken("a")).not.toThrow();
+  });
 });
 
 describe("magic sign-in tokens", () => {
