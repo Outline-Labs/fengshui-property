@@ -1,5 +1,6 @@
 "use server";
 
+import { applyReferralActivation } from "@/lib/credits";
 import {
   type OtpResult,
   finalizeReading,
@@ -67,6 +68,13 @@ export async function analyzeFloorPlan(
       yearBuilt: yearBuilt && yearBuilt > 1900 ? yearBuilt : undefined,
     });
     await finalizeReading(reservation.id, facing, analysis.score);
+    // A completed reading is "activation": release the referrer's reward (if any).
+    // Idempotent and best-effort — never fail the reading over a referral bump.
+    try {
+      await applyReferralActivation(leadId);
+    } catch (e) {
+      console.error("[referral] activation failed", e);
+    }
     return { ok: true, analysis, remaining: reservation.remaining };
   } catch (e) {
     await releaseReading(reservation.id); // refund the credit on failure

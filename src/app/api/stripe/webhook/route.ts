@@ -1,4 +1,5 @@
-import { stripe } from "@/lib/stripe";
+import { grantReadings } from "@/lib/credits";
+import { readingsForPackCents, stripe } from "@/lib/stripe";
 import { creditWallet } from "@/lib/wallet";
 
 // Node runtime: Stripe's signature verification uses Node crypto (sync HMAC),
@@ -33,16 +34,31 @@ export async function POST(request: Request) {
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
       if (session.payment_status === "paid") {
+        const leadId = session.metadata?.leadId;
         const agentId = session.metadata?.agentId;
-        const topupCents = Number(session.metadata?.topupCents ?? 0);
-        if (agentId && Number.isInteger(topupCents) && topupCents > 0) {
-          // Idempotent: ref = session id, so a redelivered event credits once.
-          await creditWallet({
-            agentId,
-            amountCents: topupCents,
-            ref: session.id,
-            kind: "topup",
-          });
+        if (leadId) {
+          // Consumer reading-pack purchase. Derive the readings from the amount
+          // actually charged (authoritative), not a client-supplied count.
+          const readings = readingsForPackCents(Number(session.amount_total ?? 0));
+          if (readings) {
+            // Idempotent: ref = session id, so a redelivered event grants once.
+            await grantReadings({
+              leadId,
+              amount: readings,
+              kind: "purchase",
+              ref: session.id,
+            });
+          }
+        } else if (agentId) {
+          const topupCents = Number(session.metadata?.topupCents ?? 0);
+          if (Number.isInteger(topupCents) && topupCents > 0) {
+            await creditWallet({
+              agentId,
+              amountCents: topupCents,
+              ref: session.id,
+              kind: "topup",
+            });
+          }
         }
       }
     }

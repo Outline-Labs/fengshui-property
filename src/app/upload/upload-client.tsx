@@ -10,9 +10,26 @@ import {
   type Dir8,
   type FlyingStarChart,
 } from "@/lib/fengshui/flying-stars";
+import type { ReadingPack } from "@/lib/stripe";
 import type { FloorPlanAnalysis, FloorPlanFactor } from "@/lib/types";
 
 import { analyzeFloorPlan } from "./actions";
+import { buyReadingsAction } from "./credits-actions";
+
+type CreditProps = {
+  freeQuota: number;
+  bonusReadings: number;
+  referralUrl: string;
+  referralReward: number;
+  referralEarned: number;
+  referralCount: number;
+  packs: ReadingPack[];
+  stripeReady: boolean;
+};
+
+function sgd(cents: number): string {
+  return `S$${(cents / 100).toFixed(2).replace(/\.00$/, "")}`;
+}
 
 const DIRECTIONS = [
   { code: "N", label: "North" },
@@ -31,17 +48,22 @@ export function UploadClient({
   remaining: initialRemaining,
   quota,
   canUpgrade,
+  creditsBanner,
+  errorBanner,
   specialistEnabled,
   specialistRequested,
   specialistPhone,
+  ...credit
 }: {
   remaining: number;
   quota: number;
   canUpgrade: boolean;
+  creditsBanner?: string;
+  errorBanner?: string;
   specialistEnabled: boolean;
   specialistRequested: boolean;
   specialistPhone: string | null;
-}) {
+} & CreditProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [facing, setFacing] = useState<string>("");
   const [year, setYear] = useState<string>("");
@@ -50,8 +72,10 @@ export function UploadClient({
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [remaining, setRemaining] = useState(initialRemaining);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const outOfCredits = remaining <= 0;
+  const banner = bannerMessage(creditsBanner, errorBanner);
 
   const handleFile = async (file: File | undefined) => {
     if (!file) return;
@@ -111,6 +135,29 @@ export function UploadClient({
   return (
     <main className="flex-1">
       <div className="mx-auto max-w-5xl px-6 sm:px-10 py-12 sm:py-16">
+        {banner && !bannerDismissed && (
+          <div
+            className={`mb-8 flex items-start justify-between gap-4 border px-5 py-3 text-sm ${
+              banner.tone === "good"
+                ? "border-jade bg-jade/10 text-ink-soft"
+                : "border-cinnabar bg-cinnabar/10 text-ink-soft"
+            }`}
+          >
+            <span>
+              <span className={banner.tone === "good" ? "text-jade" : "text-cinnabar"}>
+                ●
+              </span>{" "}
+              {banner.text}
+            </span>
+            <button
+              onClick={() => setBannerDismissed(true)}
+              className="text-muted hover:text-ink shrink-0"
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <header className="mb-10 max-w-2xl">
           <div className="text-[10px] tracking-[0.35em] uppercase text-muted mb-3">
             Tier II · Unit-level reading
@@ -127,7 +174,10 @@ export function UploadClient({
             <span className="inline-flex items-center gap-2 border border-line px-3 py-1.5">
               <span className={outOfCredits ? "text-muted" : "text-jade"}>●</span>
               <span className="text-ink-soft">
-                {remaining} of {quota} free reading{quota === 1 ? "" : "s"} left
+                {remaining} of {quota} reading{quota === 1 ? "" : "s"} left
+                {credit.bonusReadings > 0 && (
+                  <span className="text-muted"> · {credit.bonusReadings} bonus</span>
+                )}
               </span>
             </span>
             {canUpgrade && (
@@ -240,36 +290,28 @@ export function UploadClient({
 
             <div className="pt-2">
               {outOfCredits ? (
-                <div className="border-t border-cinnabar pt-5">
-                  <div className="text-[10px] tracking-[0.3em] uppercase text-cinnabar mb-2">
-                    No free readings left
-                  </div>
-                  <p className="text-ink-soft text-sm leading-relaxed mb-4 max-w-sm">
-                    You&rsquo;ve used your free readings.{" "}
-                    {canUpgrade
-                      ? "Complete your profile to unlock more."
-                      : specialistEnabled
-                        ? "Have a local property specialist walk you through your unit in person — free."
-                        : "More readings are coming soon."}
-                  </p>
-                  <div className="flex flex-wrap gap-x-8 gap-y-3">
+                <div className="border-t border-cinnabar pt-5 space-y-8">
+                  <div>
+                    <div className="text-[10px] tracking-[0.3em] uppercase text-cinnabar mb-2">
+                      No readings left
+                    </div>
+                    <p className="text-ink-soft text-sm leading-relaxed max-w-sm">
+                      You&rsquo;ve used your readings.{" "}
+                      {canUpgrade
+                        ? "Complete your profile to unlock more — or earn free readings by inviting a friend."
+                        : "Invite a friend for free readings, or top up below."}
+                    </p>
                     {canUpgrade && (
                       <a
                         href="/signup?next=/upload"
-                        className="font-display text-lg text-cinnabar inline-flex items-center gap-2 hover:gap-3 transition-all"
+                        className="mt-3 font-display text-lg text-cinnabar inline-flex items-center gap-2 hover:gap-3 transition-all"
                       >
-                        Unlock more <span aria-hidden>→</span>
-                      </a>
-                    )}
-                    {specialistEnabled && (
-                      <a
-                        href="/signup?next=/upload"
-                        className="text-sm text-ink-soft hover:text-cinnabar transition-colors self-center"
-                      >
-                        Talk to a specialist
+                        Complete your profile <span aria-hidden>→</span>
                       </a>
                     )}
                   </div>
+                  <ReferralInvite {...credit} />
+                  <BuyReadings packs={credit.packs} stripeReady={credit.stripeReady} />
                 </div>
               ) : (
                 <button
@@ -308,6 +350,7 @@ export function UploadClient({
                 specialistEnabled={specialistEnabled}
                 specialistRequested={specialistRequested}
                 specialistPhone={specialistPhone}
+                referral={credit}
                 onReset={reset}
               />
             ) : (
@@ -340,6 +383,7 @@ function Report({
   specialistEnabled,
   specialistRequested,
   specialistPhone,
+  referral,
   onReset,
 }: {
   analysis: FloorPlanAnalysis;
@@ -347,6 +391,7 @@ function Report({
   specialistEnabled: boolean;
   specialistRequested: boolean;
   specialistPhone: string | null;
+  referral: CreditProps;
   onReset: () => void;
 }) {
   const positives = analysis.factors.filter((f) => f.type === "positive");
@@ -445,6 +490,8 @@ function Report({
         />
       )}
 
+      <ReferralInvite {...referral} />
+
       <div className="border-t border-line pt-5">
         <button
           onClick={onReset}
@@ -531,6 +578,120 @@ function tone(score: number) {
 
 function directionLabel(code: string): string {
   return DIRECTIONS.find((d) => d.code === code)?.label ?? code;
+}
+
+function bannerMessage(
+  credits: string | undefined,
+  error: string | undefined,
+): { tone: "good" | "bad"; text: string } | undefined {
+  if (credits === "success" || credits === "devcredit") {
+    return { tone: "good", text: "Readings added — enjoy." };
+  }
+  if (error === "billing_unavailable") {
+    return {
+      tone: "bad",
+      text: "Payments aren't available right now. Please try again later.",
+    };
+  }
+  if (error === "badpack") {
+    return { tone: "bad", text: "That pack isn't available — please pick another." };
+  }
+  return undefined;
+}
+
+// Share-to-earn: each side gets a bonus reading once the invited friend reads
+// their first unit. The currency (free readings) costs us ~one Kimi call, so
+// it's cheap viral fuel; the per-referrer cap lives server-side.
+function ReferralInvite({
+  referralUrl,
+  referralReward,
+  referralEarned,
+  referralCount,
+}: CreditProps) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(referralUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // clipboard blocked — the input is selectable as a fallback
+    }
+  };
+
+  return (
+    <section className="border border-jade/40 bg-jade/[0.04] p-5">
+      <div className="text-[10px] tracking-[0.3em] uppercase text-jade mb-2">
+        Invite friends · 邀请
+      </div>
+      <p className="text-sm text-ink-soft leading-relaxed mb-4 max-w-sm">
+        Share your link. When a friend signs up and reads their first unit,{" "}
+        <span className="text-ink">you both get {referralReward} free readings</span>.
+      </p>
+      <div className="flex items-stretch gap-2 max-w-md">
+        <input
+          readOnly
+          value={referralUrl}
+          onFocus={(e) => e.currentTarget.select()}
+          className="flex-1 min-w-0 bg-surface border border-line px-3 py-2 text-xs text-ink-soft focus:outline-none focus:border-jade"
+        />
+        <button
+          onClick={copy}
+          className="shrink-0 border border-jade text-jade px-4 py-2 text-sm hover:bg-jade hover:text-bg transition-colors"
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      {referralCount > 0 && (
+        <p className="text-xs text-jade mt-3">
+          You&rsquo;ve earned {referralEarned} reading{referralEarned === 1 ? "" : "s"}{" "}
+          from {referralCount} friend{referralCount === 1 ? "" : "s"}. 谢谢!
+        </p>
+      )}
+    </section>
+  );
+}
+
+// Reading-credit packs via hosted Stripe Checkout (server action redirects).
+// Each pack is its own form so the validated price posts straight through.
+function BuyReadings({
+  packs,
+  stripeReady,
+}: {
+  packs: ReadingPack[];
+  stripeReady: boolean;
+}) {
+  return (
+    <section>
+      <div className="text-[10px] tracking-[0.3em] uppercase text-muted mb-3">
+        Or top up · 充值
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {packs.map((p) => (
+          <form key={p.cents} action={buyReadingsAction}>
+            <input type="hidden" name="cents" value={p.cents} />
+            <button
+              type="submit"
+              className="w-full border border-line hover:border-cinnabar transition-colors px-4 py-3 text-left group"
+            >
+              <div className="font-display text-lg text-ink group-hover:text-cinnabar transition-colors">
+                {sgd(p.cents)}
+              </div>
+              <div className="text-xs text-muted">
+                {p.readings} readings · {p.label}
+              </div>
+            </button>
+          </form>
+        ))}
+      </div>
+      {!stripeReady && (
+        <p className="text-[10px] tracking-wide text-muted mt-2">
+          Dev mode — credited instantly without payment.
+        </p>
+      )}
+    </section>
+  );
 }
 
 async function pdfToImageDataUrl(file: File, maxDim = 1600): Promise<string> {

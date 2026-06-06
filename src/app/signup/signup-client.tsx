@@ -26,11 +26,13 @@ export function SignupClient({
   error,
   initial,
   returning,
+  refCode,
 }: {
   next?: string;
   error?: string;
   initial?: Initial;
   returning?: boolean;
+  refCode?: string;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
@@ -65,6 +67,13 @@ export function SignupClient({
           three.
         </p>
 
+        {refCode && !returning && (
+          <div className="border border-jade bg-jade/10 px-5 py-3 mt-6 text-sm text-ink-soft">
+            <span className="text-jade">●</span> A friend invited you — you&rsquo;ll
+            both get a bonus reading once you&rsquo;ve read your first unit.
+          </div>
+        )}
+
         <QuotaMeter quota={quota} />
 
         {error === "email" && (
@@ -75,6 +84,7 @@ export function SignupClient({
 
         <form action={signup} className="mt-8 space-y-8">
           {next && <input type="hidden" name="next" value={next} />}
+          {refCode && <input type="hidden" name="ref" value={refCode} />}
 
           <Field label="Email" cn="电邮" required>
             <input

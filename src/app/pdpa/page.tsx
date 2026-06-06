@@ -13,18 +13,23 @@ export default function PdpaPage() {
     <LegalShell
       title="Data Protection Notice"
       cn="个人资料保护"
-      updated="27 May 2026"
+      updated="5 June 2026"
       intro="This notice sets out how Fengshui AI complies with Singapore's Personal Data Protection Act (PDPA). It complements our full Privacy Policy."
     >
       <LegalSection n="1" title="Consent">
         <p>
-          When you create an account and run readings, you consent to our
-          collecting and using your personal data to provide the service. When
-          you upload a floor plan, you consent to it being analysed by our
-          overseas AI provider (see section 5). When you ask to be matched with
-          a specialist and provide your phone number, you consent to us sharing
-          your contact details and property interest with a licensed property
-          agent.
+          When you create an account and use the service, you consent to our
+          collecting, using, and disclosing your personal data for the purposes
+          described in our{" "}
+          <a href="/privacy" className="text-cinnabar hover:underline">
+            Privacy Policy
+          </a>
+          . When you upload a floor plan, you consent to it being analysed by our
+          overseas AI provider (see section 5). Where the law allows, we may also
+          collect, use, or disclose personal data without consent — for example
+          for purposes deemed consented to, or as otherwise permitted under the
+          PDPA. You may give, or decline to give, separate consent for specific
+          uses or disclosures.
         </p>
       </LegalSection>
 
@@ -50,13 +55,13 @@ export default function PdpaPage() {
 
       <LegalSection n="4" title="Withdrawing consent &amp; Do Not Call">
         <p>
-          You may withdraw consent — including withdrawing from specialist
-          introductions — by emailing the DPO; we will stop the relevant use
-          within a reasonable time. By giving us your phone number and asking to
-          be contacted, you consent to a matched agent calling or messaging you
-          about your property interest, which overrides your Do Not Call (DNC)
-          registration for that purpose only. Withdraw that consent and we, and
-          the agent, will stop.
+          You may withdraw any consent you have given by emailing the DPO; we
+          will stop the relevant collection, use, or disclosure within a
+          reasonable time, though this may mean we can no longer provide parts of
+          the service. Where you provide a phone number and ask us to contact you
+          about your request, you consent to us calling or messaging you for that
+          purpose, which overrides your Do Not Call (DNC) registration for that
+          purpose only. Withdraw that consent and we will stop.
         </p>
       </LegalSection>
 
@@ -64,19 +69,19 @@ export default function PdpaPage() {
         <p>
           Floor-plan readings are processed by Moonshot AI, which may store and
           process data outside Singapore, including in the People&rsquo;s
-          Republic of China. We take reasonable steps so that this processing
-          affords protection comparable to the PDPA, and we send only the data
-          needed for the reading.
+          Republic of China. Some of our other service providers may also process
+          data overseas. We take reasonable steps so that such processing affords
+          protection comparable to the PDPA, and we send only the data needed.
         </p>
       </LegalSection>
 
       <LegalSection n="6" title="Retention &amp; security">
         <p>
-          We keep personal data only as long as needed for the purposes above or
-          as required by law; floor-plan images are not retained after a
-          reading. We protect data with encryption in transit and access
-          controls, and will report any notifiable breach to the PDPC and
-          affected individuals as the law requires.
+          We keep personal data only as long as needed for the purposes set out
+          in our Privacy Policy or as required by law; floor-plan images are not
+          retained after a reading. We protect data with encryption in transit
+          and access controls, and will report any notifiable breach to the PDPC
+          and affected individuals as the law requires.
         </p>
       </LegalSection>
     </LegalShell>
