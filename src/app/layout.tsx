@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Fraunces, Manrope, Noto_Serif_SC } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 
+import { PostHogAnalytics } from "@/components/posthog-analytics";
+
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -59,6 +61,9 @@ export default function RootLayout({
             Vercel → Project → Analytics. No PII / no ad trackers — consistent
             with the privacy policy. */}
         <Analytics />
+        {/* Product analytics (funnels, replay, flags) — no-op until
+            NEXT_PUBLIC_POSTHOG_KEY is set. EU-hosted for PDPA. */}
+        <PostHogAnalytics />
       </body>
     </html>
   );
