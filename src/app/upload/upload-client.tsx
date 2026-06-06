@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { useRef, useState } from "react";
 
 import { FlyingStarsGrid } from "@/components/flying-stars-grid";
@@ -554,6 +555,12 @@ function ConfirmLayout({
       engine: res.engine,
     });
     setDirty(false);
+    posthog.capture("reading_layout_confirmed", {
+      facing,
+      year_built: year,
+      room_count: rooms.length,
+      new_score: res.score,
+    });
   };
 
   return (
@@ -768,6 +775,7 @@ function ReferralInvite({
       await navigator.clipboard.writeText(referralUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
+      posthog.capture("referral_link_copied");
     } catch {
       // clipboard blocked — the input is selectable as a fallback
     }

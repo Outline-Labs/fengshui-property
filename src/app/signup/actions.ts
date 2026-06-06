@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { attachReferral } from "@/lib/credits";
 import { upsertLead } from "@/lib/leads";
+import { getPostHogClient } from "@/lib/posthog-server";
 import { createSession } from "@/lib/session";
 
 function safeNext(next: string | undefined): string {
@@ -22,18 +23,36 @@ export async function signup(formData: FormData) {
     redirect(`/signup?${q.toString()}`);
   }
 
-  const id = await upsertLead({
-    email,
-    name: formData.get("name")?.toString(),
-    phone: formData.get("phone")?.toString(),
-    propertyInterest: formData.get("propertyInterest")?.toString(),
-    timeline: formData.get("timeline")?.toString(),
-  });
+  const name = formData.get("name")?.toString();
+  const phone = formData.get("phone")?.toString();
+  const propertyInterest = formData.get("propertyInterest")?.toString();
+  const timeline = formData.get("timeline")?.toString();
+
+  const id = await upsertLead({ email, name, phone, propertyInterest, timeline });
 
   // Credit the referee's signup bonus and record their referrer. No-ops on a
   // self / unknown / already-referred code, so it's safe on every submit.
   if (ref) await attachReferral(id, ref);
 
   await createSession(id);
+
+  const ph = getPostHogClient();
+  if (ph) {
+    ph.identify({ distinctId: id, properties: { email, name, phone } });
+    ph.capture({
+      distinctId: id,
+      event: "signup_completed",
+      properties: {
+        email,
+        has_name: !!name,
+        has_phone: !!phone,
+        has_property_interest: !!propertyInterest,
+        has_timeline: !!timeline,
+        referred: !!ref,
+      },
+    });
+    await ph.flush(); // deliver before the action redirects (serverless)
+  }
+
   redirect(safeNext(next));
 }

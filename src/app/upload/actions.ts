@@ -1,6 +1,7 @@
 "use server";
 
 import { applyReferralActivation } from "@/lib/credits";
+import { getPostHogClient } from "@/lib/posthog-server";
 import {
   type OtpResult,
   finalizeReading,
@@ -150,6 +151,24 @@ export async function analyzeFloorPlan(
       await applyReferralActivation(leadId);
     } catch (e) {
       console.error("[referral] activation failed", e);
+    }
+    const ph = getPostHogClient();
+    if (ph) {
+      ph.capture({
+        distinctId: leadId,
+        event: "floor_plan_analyzed",
+        properties: {
+          facing,
+          year_built: year,
+          score: analysis.score,
+          confidence: analysis.confidence,
+          factor_count: analysis.factors.length,
+          remaining_credits: reservation.remaining,
+          engine_period: analysis.engine?.period,
+          engine_group: analysis.engine?.group,
+        },
+      });
+      await ph.flush(); // deliver before the action returns (serverless)
     }
     return { ok: true, analysis, remaining: reservation.remaining };
   } catch (e) {

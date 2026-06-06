@@ -2,6 +2,7 @@
 
 import maplibregl, { type StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import posthog from "posthog-js";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
@@ -92,9 +93,17 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
       setStatus(
         localStorage.getItem("fengshui:unlocked") === "1" ? "full" : "brief",
       );
-    } catch {
+      posthog.capture("property_analyzed", {
+        lat: next.lat,
+        lon: next.lon,
+        score: result.score,
+        address: result.address?.formatted,
+        unlocked: localStorage.getItem("fengshui:unlocked") === "1",
+      });
+    } catch (err) {
       setStatus("error");
       setError("The reading couldn't be drawn just now. Try another spot.");
+      posthog.captureException(err);
     }
   }, []);
 
@@ -179,6 +188,13 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
       localStorage.setItem("fengshui:unlocked", "1");
       setUnlocked(true);
       setStatus("full");
+      posthog.identify(email, { email });
+      posthog.capture("map_reading_unlocked", {
+        lat: coords.lat,
+        lon: coords.lon,
+        address: analysis?.address?.formatted,
+        score: analysis?.score,
+      });
     }
     return result;
   };

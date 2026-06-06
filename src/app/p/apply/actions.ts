@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { applyAgent } from "@/lib/agents";
+import { getPostHogClient } from "@/lib/posthog-server";
 
 import { isValidRef } from "./refs";
 
@@ -35,6 +36,16 @@ export async function submitApplication(formData: FormData) {
     referredBy: ref,
     approved: true,
   });
+
+  const ph = getPostHogClient();
+  if (ph) {
+    ph.capture({
+      distinctId: email,
+      event: "agent_application_submitted",
+      properties: { email, agency, has_territories: !!territories, invite_ref: ref },
+    });
+    await ph.flush(); // deliver before the action redirects (serverless)
+  }
 
   redirect("/apply?submitted=1");
 }

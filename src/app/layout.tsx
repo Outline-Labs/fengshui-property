@@ -61,8 +61,9 @@ export default function RootLayout({
             Vercel → Project → Analytics. No PII / no ad trackers — consistent
             with the privacy policy. */}
         <Analytics />
-        {/* Product analytics (funnels, replay, flags) — no-op until
-            NEXT_PUBLIC_POSTHOG_KEY is set. EU-hosted for PDPA. */}
+        {/* Product analytics (funnels, replay, flags). Init lives in
+            instrumentation-client.ts; this only captures App Router pageviews.
+            No-op until NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN is set. EU-hosted for PDPA. */}
         <PostHogAnalytics />
       </body>
     </html>
