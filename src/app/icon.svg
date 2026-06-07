@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#8b2c1c"/>
+  <!-- luopan compass needle: bright north, faint south, on a brand-cinnabar tile -->
+  <polygon points="16,4 20.5,16 11.5,16" fill="#f5efe6"/>
+  <polygon points="16,28 20.5,16 11.5,16" fill="#f5efe6" opacity="0.4"/>
+  <circle cx="16" cy="16" r="2" fill="#8b2c1c" stroke="#f5efe6" stroke-width="1.1"/>
+</svg>
