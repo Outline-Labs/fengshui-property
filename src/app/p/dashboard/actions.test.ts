@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // exact target path. Each test asserts the path the action tried to navigate
 // to — that path *is* the action's contract.
 //
-// All collaborators (session, agents, wallet, stripe, headers) are mocked so
-// every branch is reachable deterministically without a DB or network.
+// All collaborators (session, agents, wallet, revolut) are mocked so every
+// branch is reachable deterministically without a DB or network.
 // ---------------------------------------------------------------------------
 
 class RedirectError extends Error {
@@ -24,13 +24,6 @@ const redirect = vi.fn((to: string): never => {
 
 vi.mock("next/navigation", () => ({
   redirect: (to: string) => redirect(to),
-}));
-
-const getHeader = vi.fn((name: string): string | null =>
-  name === "host" ? "partners.fengshuiai.sg" : null,
-);
-vi.mock("next/headers", () => ({
-  headers: async () => ({ get: (name: string) => getHeader(name) }),
 }));
 
 const getAgentId = vi.fn<() => Promise<string | null>>();
@@ -50,13 +43,11 @@ vi.mock("@/lib/wallet", () => ({
   creditWallet: (p: unknown) => creditWallet(p),
 }));
 
-// Real pack amounts (cents): 1 / 5 / 10 verified leads. We mock so the test
-// doesn't depend on Stripe's SDK, but we keep the validation truthful.
+// Real pack amounts (cents): 1 / 5 / 10 verified leads. We mock @/lib/revolut so
+// the test doesn't depend on env, but keep the validation truthful.
 const TOPUP_PACKS_CENTS = [8800, 44000, 88000];
-const stripe = vi.fn<() => unknown>(() => null);
-vi.mock("@/lib/stripe", () => ({
+vi.mock("@/lib/revolut", () => ({
   isValidTopupAmount: (cents: number) => TOPUP_PACKS_CENTS.includes(cents),
-  stripe: () => stripe(),
 }));
 
 const { claimAction, topUpAction, agentLogout } = await import("./actions");
@@ -85,10 +76,6 @@ beforeEach(() => {
   destroyAgentSession.mockReset();
   claimLead.mockReset();
   creditWallet.mockClear();
-  stripe.mockReset();
-  stripe.mockReturnValue(null);
-  getHeader.mockClear();
-  delete process.env.STRIPE_SECRET_KEY;
 });
 
 afterEach(() => {
@@ -160,10 +147,11 @@ describe("claimAction", () => {
 });
 
 // ---------------------------------------------------------------------------
-// topUpAction — never trusts the client amount, and fabricates a credit ONLY
-// in the offline dev path (no Stripe key AND non-production). Vitest runs with
-// NODE_ENV="test", so 'test' !== 'production' makes the dev branch active here;
-// the production fail-closed branch is exercised explicitly via vi.stubEnv.
+// topUpAction — never trusts the client amount. Agent wallet top-ups are
+// deferred to v2 (no live processor), so it fabricates a credit ONLY in the
+// offline dev path (non-production). Vitest runs with NODE_ENV="test", so
+// 'test' !== 'production' makes the dev branch active here; the production
+// fail-closed branch is exercised explicitly via vi.stubEnv.
 // ---------------------------------------------------------------------------
 describe("topUpAction", () => {
   it("sends an unauthenticated agent to /login before touching the amount", async () => {
@@ -182,7 +170,6 @@ describe("topUpAction", () => {
 
     expect(to).toBe("/dashboard?error=badamount");
     expect(creditWallet).not.toHaveBeenCalled();
-    expect(stripe).not.toHaveBeenCalled();
   });
 
   it("rejects a non-numeric amount with ?error=badamount", async () => {
@@ -194,9 +181,8 @@ describe("topUpAction", () => {
     expect(creditWallet).not.toHaveBeenCalled();
   });
 
-  it("dev path: with no Stripe client and a valid pack, credits the wallet with a dev: ref and redirects to ?topup=devcredit", async () => {
+  it("dev path: a valid pack credits the wallet with a dev: ref and redirects to ?topup=devcredit", async () => {
     getAgentId.mockResolvedValue("agent-1");
-    stripe.mockReturnValue(null);
 
     const to = await targetOf(() => topUpAction(form({ amountCents: "44000" })));
 
@@ -216,7 +202,6 @@ describe("topUpAction", () => {
 
   it("dev path credits the exact pack amount the agent chose, not a fixed one", async () => {
     getAgentId.mockResolvedValue("agent-1");
-    stripe.mockReturnValue(null);
 
     await targetOf(() => topUpAction(form({ amountCents: "88000" })));
 
@@ -224,11 +209,10 @@ describe("topUpAction", () => {
     expect(arg.amountCents).toBe(88000);
   });
 
-  it("prod fail-closed: no Stripe key in production redirects to ?error=billing_unavailable and never fabricates a credit", async () => {
-    // The security-critical guarantee: a misconfigured production (Stripe key
-    // missing) must NEVER credit a wallet for free — it fails closed.
+  it("prod fail-closed: in production redirects to ?error=billing_unavailable and never fabricates a credit", async () => {
+    // The security-critical guarantee: production (agent top-up deferred to v2,
+    // no live processor) must NEVER credit a wallet for free — it fails closed.
     getAgentId.mockResolvedValue("agent-1");
-    stripe.mockReturnValue(null);
     vi.stubEnv("NODE_ENV", "production");
 
     const to = await targetOf(() => topUpAction(form({ amountCents: "8800" })));

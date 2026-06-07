@@ -1,6 +1,6 @@
-// Allowlisted consumer hosts, used to build absolute return URLs for Stripe
-// Checkout so a forged Host header can't redirect a paying user (and their
-// session) to an attacker domain. Mirrors lib/partner-hosts for the consumer
+// Allowlisted consumer hosts, used to build absolute return URLs for the
+// Revolut hosted checkout so a forged Host header can't redirect a paying user
+// (and their session) to an attacker domain. Mirrors lib/partner-hosts for the consumer
 // surface. Override the list with CONSUMER_HOSTS (comma-separated).
 
 const DEFAULT_CONSUMER_HOSTS =

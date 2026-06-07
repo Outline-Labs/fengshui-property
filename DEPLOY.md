@@ -37,18 +37,20 @@ Set these in **Vercel → Project → Settings → Environment Variables** (Prod
 | `TWILIO_VERIFY_SERVICE_SID` | Launch | Twilio Verify Service SID (`VA…`) — create a Verify Service in the Console |
 | `RESEND_API_KEY` | Launch | resend.com |
 | `EMAIL_FROM` | Launch | e.g. `Fengshui AI <noreply@fengshuiai.sg>` (verified Resend domain) |
-| `STRIPE_SECRET_KEY` | Launch | Stripe Dashboard (test mode `sk_test_…` pre-launch). Absent ⇒ dev credits top-ups instantly; **prod fails closed** (no top-ups). |
-| `STRIPE_WEBHOOK_SECRET` | Launch | `whsec_…` from `stripe listen` or the Dashboard webhook endpoint — verifies events at `/api/stripe/webhook`. |
+| `REVOLUT_SECRET_KEY` | Launch | Revolut Merchant API secret key (consumer reading-credit packs). Absent ⇒ dev grants packs instantly; **prod fails closed** (no purchases). |
+| `REVOLUT_ENV` | Launch | `sandbox` (default, fail-safe) or `production` — which environment `REVOLUT_SECRET_KEY` belongs to. |
+| `REVOLUT_WEBHOOK_SECRET` | Launch | Signing secret of the Revolut `ORDER_COMPLETED` webhook — verifies events at `/api/revolut/webhook` (which credits the readings). |
 | `PARTNERS_ENABLED` | No | Agent-surface kill switch. **Leave UNSET in production** (consumer-only v1 → surface off). Set `true` to enable the dashboard on a deploy. |
 | `MAX_DAILY_READINGS` | No | Global rolling-24h ceiling on floor-plan (Kimi-billed) reads — a runaway-cost circuit breaker on top of the per-IP firewall limit. Default `2000`; lower it if you see abuse. |
-| `CONSUMER_HOSTS` | No | Allowlisted hosts for building Stripe Checkout return URLs. Default covers `fengshuiai.sg`, `www.`, and the `*.vercel.app` deploy. |
+| `CONSUMER_HOSTS` | No | Allowlisted hosts for building the Revolut checkout return URL. Default covers `fengshuiai.sg`, `www.`, and the `*.vercel.app` deploy. |
 | `ONEMAP_TOKEN` | No | Static-token fallback; only used if email/password are unset |
 | `DATA_GOV_SG_API_KEY`, `LTA_ACCOUNT_KEY` | No | Offline `pnpm data:pois` only — POIs are baked into `data/pois.json` |
 
 **Required = the build/app won't work without it.** **Launch = the app boots
 (dev-style logging) but the business can't run:** no Twilio ⇒ no OTP SMS ⇒ no
 verifiable/sellable leads; no Resend ⇒ agents can't receive sign-in links; no
-Stripe ⇒ agents can't fund their wallet ⇒ can't claim leads (no revenue).
+Revolut ⇒ consumers can't buy reading credits (purchases fail closed → no
+revenue). (Agent wallet top-ups are deferred to v2 and dev-credit only.)
 
 ---
 
@@ -97,17 +99,23 @@ you prefer a CNAME over the A record.)
 - [ ] `https://fengshuiai.sg/p/dashboard` → 404.
 - [ ] `https://partners.fengshuiai.sg/login` → enter an approved agent's email → **magic-link email arrives** → link signs in → `/dashboard`.
 - [ ] `curl -sI https://partners.fengshuiai.sg/ | grep -i x-robots-tag` → `noindex, nofollow`.
-- [ ] Partner dashboard: top up the wallet (Stripe test card `4242 4242 4242 4242`) → balance rises; a newly OTP-verified lead appears in available leads, and claiming it debits S$88 and reveals contact.
+- [ ] Partner dashboard: top up the wallet (dev-credits instantly — agent billing is deferred to v2) → balance rises; a newly OTP-verified lead appears in available leads, and claiming it debits S$88 and reveals contact.
 
-### 6 — Stripe webhook (billing)
-Top-ups are credited by the webhook, not the browser redirect — so this must be
-wired up or balances never move. In **Stripe → Developers → Webhooks**, add an
-endpoint `https://<host>/api/stripe/webhook` (the live domain at launch; the
-`*.vercel.app` host also works for test mode, since `/api/*` bypasses the host
-proxy). Subscribe to **`checkout.session.completed`** and copy the endpoint's
-signing secret into `STRIPE_WEBHOOK_SECRET`. Locally:
-`stripe listen --forward-to localhost:3000/api/stripe/webhook` prints a dev
-`whsec_…`. Switch the `sk_test_…`/`whsec_…` pair to live keys before real traffic.
+### 6 — Revolut webhook (billing)
+Reading-credit purchases are credited by the webhook, not the browser redirect
+(Revolut has a single post-payment redirect, so the return page only announces
+"payment received") — so this must be wired up or credits never land. In the
+**Revolut Business → Merchant → Webhooks** area (or via the Merchant API), add an
+endpoint `https://<host>/api/revolut/webhook` (the live domain at launch; the
+`*.vercel.app` host also works, since `/api/*` bypasses the host proxy).
+Subscribe to **`ORDER_COMPLETED`** and copy the endpoint's signing secret into
+`REVOLUT_WEBHOOK_SECRET`. Test end-to-end against the Revolut **sandbox**
+(`REVOLUT_ENV=sandbox`) first, then switch to a live key + `REVOLUT_ENV=production`
+before real traffic.
+
+**Prerequisite:** the Merchant module must be enabled on the Revolut Business
+account and pass merchant onboarding/KYB before live acquiring works (sandbox
+needs no approval).
 
 ### 7 — Rate limiting (Vercel Firewall) — **required before public launch**
 Each floor-plan reading is a *paid* vision-model call, and signup is email-only

@@ -1,13 +1,11 @@
 "use server";
 
 import crypto from "node:crypto";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { claimLead } from "@/lib/agents";
-import { safePartnerHost } from "@/lib/partner-hosts";
+import { isValidTopupAmount } from "@/lib/revolut";
 import { destroyAgentSession, getAgentId } from "@/lib/session";
-import { isValidTopupAmount, stripe } from "@/lib/stripe";
 import { creditWallet } from "@/lib/wallet";
 
 export async function claimAction(formData: FormData) {
@@ -33,51 +31,22 @@ export async function topUpAction(formData: FormData) {
   const amountCents = Number(formData.get("amountCents"));
   if (!isValidTopupAmount(amountCents)) redirect("/dashboard?error=badamount");
 
-  const s = stripe();
-  if (!s) {
-    // No Stripe keys configured. In dev, credit instantly so the wallet flow
-    // works offline (mirrors the Twilio OTP "000000" dev path). In prod, fail
-    // closed — never fabricate a credit.
-    if (process.env.NODE_ENV !== "production") {
-      await creditWallet({
-        agentId,
-        amountCents,
-        ref: `dev:${crypto.randomUUID()}`,
-        kind: "topup",
-      });
-      console.log(`[Stripe dev] credited ${amountCents}c to ${agentId}`);
-      redirect("/dashboard?topup=devcredit");
-    }
-    redirect("/dashboard?error=billing_unavailable");
+  // Agent wallet top-ups (the lead marketplace) are deferred to v2 — consumer
+  // reading-credit packs ship first and are the only live Revolut flow. Until a
+  // live processor is wired for the agent surface, credit instantly in dev so
+  // the wallet flow works offline (mirrors the Twilio OTP "000000" dev path),
+  // and fail closed in production — never fabricate a credit.
+  if (process.env.NODE_ENV !== "production") {
+    await creditWallet({
+      agentId,
+      amountCents,
+      ref: `dev:${crypto.randomUUID()}`,
+      kind: "topup",
+    });
+    console.log(`[wallet dev] credited ${amountCents}c to ${agentId}`);
+    redirect("/dashboard?topup=devcredit");
   }
-
-  // Build the return URLs from an allowlisted host so a forged Host header
-  // can't redirect the agent (and their session) to an attacker domain.
-  const h = await headers();
-  const host = safePartnerHost(h.get("host"));
-  const proto = host.includes("localhost") ? "http" : "https";
-  const origin = `${proto}://${host}`;
-
-  const session = await s.checkout.sessions.create({
-    mode: "payment",
-    line_items: [
-      {
-        price_data: {
-          currency: "sgd",
-          unit_amount: amountCents,
-          product_data: { name: "Lead wallet top-up" },
-        },
-        quantity: 1,
-      },
-    ],
-    // The webhook reads these to credit the right wallet by the right amount.
-    metadata: { agentId, topupCents: String(amountCents) },
-    success_url: `${origin}/dashboard?topup=success`,
-    cancel_url: `${origin}/dashboard?topup=cancelled`,
-  });
-
-  if (!session.url) redirect("/dashboard?error=billing_unavailable");
-  redirect(session.url);
+  redirect("/dashboard?error=billing_unavailable");
 }
 
 export async function agentLogout() {

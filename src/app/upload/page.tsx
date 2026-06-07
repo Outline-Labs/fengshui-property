@@ -9,7 +9,7 @@ import { getCredits } from "@/lib/leads";
 import { partnersEnabled } from "@/lib/partners";
 import { MAX_QUOTA } from "@/lib/quota";
 import { getLeadId } from "@/lib/session";
-import { READING_PACKS, stripeConfigured } from "@/lib/stripe";
+import { READING_PACKS, revolutConfigured } from "@/lib/revolut";
 
 import { UploadClient } from "./upload-client";
 
@@ -57,7 +57,7 @@ export default async function UploadPage({
         referralEarned={stats.earnedReadings}
         referralCount={stats.rewarded}
         packs={[...READING_PACKS]}
-        stripeReady={stripeConfigured()}
+        revolutReady={revolutConfigured()}
         creditsBanner={credits}
         errorBanner={error}
         specialistEnabled={partnersEnabled()}

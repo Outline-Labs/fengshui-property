@@ -11,7 +11,7 @@ import {
   type Dir8,
   type FlyingStarChart,
 } from "@/lib/fengshui/flying-stars";
-import type { ReadingPack } from "@/lib/stripe";
+import type { ReadingPack } from "@/lib/revolut";
 import type {
   FloorPlanAnalysis,
   FloorPlanFactor,
@@ -30,7 +30,7 @@ type CreditProps = {
   referralEarned: number;
   referralCount: number;
   packs: ReadingPack[];
-  stripeReady: boolean;
+  revolutReady: boolean;
 };
 
 function sgd(cents: number): string {
@@ -317,7 +317,7 @@ export function UploadClient({
                     )}
                   </div>
                   <ReferralInvite {...credit} />
-                  <BuyReadings packs={credit.packs} stripeReady={credit.stripeReady} />
+                  <BuyReadings packs={credit.packs} revolutReady={credit.revolutReady} />
                 </div>
               ) : (
                 <button
@@ -747,6 +747,14 @@ function bannerMessage(
   if (credits === "success" || credits === "devcredit") {
     return { tone: "good", text: "Readings added — enjoy." };
   }
+  if (credits === "done") {
+    // Revolut has a single post-payment redirect and the webhook is the source
+    // of truth for crediting — confirm receipt without promising the count yet.
+    return {
+      tone: "good",
+      text: "Payment received — your readings will appear in a moment.",
+    };
+  }
   if (error === "billing_unavailable") {
     return {
       tone: "bad",
@@ -814,14 +822,15 @@ function ReferralInvite({
   );
 }
 
-// Reading-credit packs via hosted Stripe Checkout (server action redirects).
-// Each pack is its own form so the validated price posts straight through.
+// Reading-credit packs via the Revolut hosted checkout page (server action
+// redirects). Each pack is its own form so the validated price posts straight
+// through.
 function BuyReadings({
   packs,
-  stripeReady,
+  revolutReady,
 }: {
   packs: ReadingPack[];
-  stripeReady: boolean;
+  revolutReady: boolean;
 }) {
   return (
     <section>
@@ -846,7 +855,7 @@ function BuyReadings({
           </form>
         ))}
       </div>
-      {!stripeReady && (
+      {!revolutReady && (
         <p className="text-[10px] tracking-wide text-muted mt-2">
           Dev mode — credited instantly without payment.
         </p>
