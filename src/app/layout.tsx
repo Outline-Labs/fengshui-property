@@ -25,18 +25,22 @@ const notoSerifSC = Noto_Serif_SC({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://fengshuiai.sg"),
+  // www is the live canonical (the apex 308-redirects to it), so metadataBase —
+  // which resolves canonical + OG URLs — must match, or tags point at a URL that
+  // immediately redirects.
+  metadataBase: new URL("https://www.fengshuiai.sg"),
   title: {
     default: "Fengshui AI — AI-powered fengshui analysis for Singapore property",
     template: "%s | Fengshui AI",
   },
   description:
     "Free AI fengshui analysis of any Singapore property. Map-based location analysis instantly, detailed unit-level analysis after signup.",
+  alternates: { canonical: "/" },
   openGraph: {
     title: "Fengshui AI",
     description:
       "Free AI fengshui analysis of any Singapore property. Map-based location analysis instantly, detailed unit-level analysis after signup.",
-    url: "https://fengshuiai.sg",
+    url: "https://www.fengshuiai.sg",
     siteName: "Fengshui AI",
     locale: "en_SG",
     type: "website",
