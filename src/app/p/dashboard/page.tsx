@@ -12,7 +12,7 @@ import {
   sgd,
 } from "@/lib/agents";
 import { getAgentId } from "@/lib/session";
-import { TOPUP_PACKS_CENTS, stripeConfigured } from "@/lib/stripe";
+import { TOPUP_PACKS_CENTS } from "@/lib/revolut";
 import { getWallet } from "@/lib/wallet";
 
 import { agentLogout, claimAction, topUpAction } from "./actions";
@@ -48,7 +48,9 @@ export default async function DashboardPage({
   ]);
   const spent = claims.reduce((s, c) => s + c.priceCents, 0);
   const balanceCents = wallet.balanceCents;
-  const stripeReady = stripeConfigured();
+  // Agent wallet top-ups are deferred to v2 (no live processor yet): outside
+  // production they dev-credit instantly, so surface that as a dev hint.
+  const topupDevCredit = process.env.NODE_ENV !== "production";
 
   return (
     <main className="flex-1">
@@ -120,7 +122,7 @@ export default async function DashboardPage({
               <p className="text-sm text-bg/70">
                 Pre-fund to claim instantly — each verified lead is{" "}
                 {sgd(VERIFIED_PRICE_CENTS)}. Claiming debits your balance.
-                {!stripeReady && (
+                {topupDevCredit && (
                   <span className="text-cinnabar">
                     {" "}
                     Dev mode: top-ups credit instantly.

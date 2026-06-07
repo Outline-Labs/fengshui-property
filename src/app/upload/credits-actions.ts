@@ -4,18 +4,22 @@ import crypto from "node:crypto";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { grantReadings } from "@/lib/credits";
 import { safeConsumerHost } from "@/lib/consumer-hosts";
+import { grantReadings } from "@/lib/credits";
 import { getPostHogClient } from "@/lib/posthog-server";
+import {
+  createOrder,
+  readingsForPackCents,
+  revolutConfigured,
+} from "@/lib/revolut";
 import { getLeadId } from "@/lib/session";
-import { readingsForPackCents, stripe } from "@/lib/stripe";
 
 /**
- * Buy a reading-credit pack via hosted Stripe Checkout. The price is validated
- * against READING_PACKS server-side and the readings are derived from it (the
- * webhook re-derives from the charged amount), so a tampered form can't mint
- * credits. Mirrors the agent wallet top-up: dev-credits instantly with no Stripe
- * keys (non-prod), fails closed in prod.
+ * Buy a reading-credit pack via the Revolut hosted checkout page. The price is
+ * validated against READING_PACKS server-side and the readings are derived from
+ * it (the webhook re-derives from the order amount Revolut confirms), so a
+ * tampered form can't mint credits. Mirrors the dev pattern elsewhere:
+ * dev-credits instantly with no Revolut keys (non-prod), fails closed in prod.
  */
 export async function buyReadingsAction(formData: FormData) {
   const leadId = await getLeadId();
@@ -25,10 +29,10 @@ export async function buyReadingsAction(formData: FormData) {
   const readings = readingsForPackCents(cents);
   if (!readings) redirect("/upload?error=badpack");
 
-  const s = stripe();
-  if (!s) {
-    // No Stripe keys. In dev, grant instantly so the flow works offline (mirrors
-    // the OTP "000000" dev path). In prod, fail closed — never fabricate credit.
+  if (!revolutConfigured()) {
+    // No Revolut keys. In dev, grant instantly so the flow works offline
+    // (mirrors the OTP "000000" dev path). In prod, fail closed — never
+    // fabricate credit.
     if (process.env.NODE_ENV !== "production") {
       await grantReadings({
         leadId,
@@ -46,25 +50,20 @@ export async function buyReadingsAction(formData: FormData) {
   const proto = host.includes("localhost") ? "http" : "https";
   const origin = `${proto}://${host}`;
 
-  const session = await s.checkout.sessions.create({
-    mode: "payment",
-    line_items: [
-      {
-        price_data: {
-          currency: "sgd",
-          unit_amount: cents,
-          product_data: { name: `Fengshui AI · ${readings} reading credits` },
-        },
-        quantity: 1,
-      },
-    ],
-    // The webhook reads leadId; readings are re-derived from amount_total.
-    metadata: { leadId, kind: "reading_pack", readings: String(readings) },
-    success_url: `${origin}/upload?credits=success`,
-    cancel_url: `${origin}/upload?credits=cancelled`,
+  // extRef carries the leadId — echoed in the ORDER_COMPLETED webhook and on the
+  // order — so the webhook credits the right lead; readings are re-derived from
+  // the order amount. Revolut has a single redirect_url (no success/cancel
+  // split), so the webhook is the source of truth and the return page only
+  // announces "payment received" (?credits=done).
+  const order = await createOrder({
+    amountCents: cents,
+    currency: "SGD",
+    extRef: leadId,
+    redirectUrl: `${origin}/upload?credits=done`,
+    description: `Fengshui AI · ${readings} reading credits`,
   });
 
-  if (!session.url) redirect("/upload?error=billing_unavailable");
+  if (!order.checkout_url) redirect("/upload?error=billing_unavailable");
 
   const ph = getPostHogClient();
   if (ph) {
@@ -74,11 +73,11 @@ export async function buyReadingsAction(formData: FormData) {
       properties: {
         amount_cents: cents,
         readings,
-        stripe_session_id: session.id,
+        revolut_order_id: order.id,
       },
     });
     await ph.flush(); // deliver before the action redirects (serverless)
   }
 
-  redirect(session.url);
+  redirect(order.checkout_url);
 }

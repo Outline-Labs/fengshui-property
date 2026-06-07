@@ -92,7 +92,7 @@ export const agents = sqliteTable("agents", {
 ]);
 
 // Append-only wallet ledger: top-ups (+), claim debits (−), and refunds.
-// `ref` is the idempotency key — the Stripe Checkout Session id for top-ups
+// `ref` is the idempotency key — the payment processor's order id for top-ups
 // (so a redelivered webhook credits once) and the claim id for debits (so a
 // retried claim can't double-charge). `balanceAfter` snapshots the cached
 // balance for independent reconciliation against agents.balance_cents.
@@ -108,8 +108,8 @@ export const walletTransactions = sqliteTable("wallet_transactions", {
 
 // Append-only consumer reading-credit ledger: referral rewards/bonuses (+) and
 // pack purchases (+). The lead-side mirror of wallet_transactions. `ref` is the
-// idempotency key — the Stripe Checkout Session id for purchases (so a
-// redelivered webhook grants once), `referral:<refereeId>` for a referrer's
+// idempotency key — the Revolut order id for purchases (so a redelivered
+// webhook grants once), `referral:<refereeId>` for a referrer's
 // reward (one per referee), `referee:<leadId>` for the signup bonus.
 // `balanceAfter` snapshots leads.bonus_readings for reconciliation.
 export const readingGrants = sqliteTable("reading_grants", {

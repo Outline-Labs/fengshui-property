@@ -34,9 +34,9 @@ export async function getWallet(
 export type CreditResult = { deduped: boolean; balanceCents: number };
 
 /**
- * Credit an agent's wallet (a Stripe top-up, or a refund). `ref` is the
- * idempotency key — the Stripe Checkout Session id for top-ups (so a redelivered
- * webhook can't double-credit) and a unique `dev:<uuid>` for the offline dev
+ * Credit an agent's wallet (a top-up, or a refund). `ref` is the idempotency
+ * key — the payment processor's order id for top-ups (so a redelivered webhook
+ * can't double-credit) and a unique `dev:<uuid>` for the offline dev
  * top-up. The ledger insert and the balance bump run in one atomic db.batch; the
  * UNIQUE(ref) on the ledger aborts (and rolls back) a duplicate, in which case
  * we report `deduped` and leave the balance unchanged.

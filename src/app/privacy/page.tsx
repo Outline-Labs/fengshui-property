@@ -29,7 +29,7 @@ export default function PrivacyPage() {
         </p>
         <p>
           <strong>Payment information</strong> — if you buy reading credits,
-          your payment is handled by our payment processor (Stripe). We receive
+          your payment is handled by our payment processor (Revolut). We receive
           confirmation and limited details of the transaction; we do not collect
           or store your full card number.
         </p>

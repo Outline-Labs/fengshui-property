@@ -84,8 +84,8 @@ export async function referralCodeExists(rawCode: string): Promise<boolean> {
 export type GrantResult = { deduped: boolean; bonusReadings: number };
 
 /**
- * Credit reading(s) to a lead. `ref` is the idempotency key — the Stripe
- * session id for a purchase, `referee:<leadId>` for a signup bonus,
+ * Credit reading(s) to a lead. `ref` is the idempotency key — the Revolut
+ * order id for a purchase, `referee:<leadId>` for a signup bonus,
  * `referral:<refereeId>` for a referrer's reward. The ledger insert and the
  * bonus_readings bump run in one atomic db.batch; UNIQUE(ref) aborts (and rolls
  * back) a duplicate, in which case we report `deduped` and leave the count be.

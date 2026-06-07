@@ -128,7 +128,7 @@ export function ensureSchema(): Promise<void> {
         )
       `);
       // Append-only wallet ledger. UNIQUE(ref) is the idempotency key for
-      // Stripe webhook redelivery (ref = session id) and double-debit guard
+      // payment webhook redelivery (ref = order id) and double-debit guard
       // (ref = claim id).
       await client.execute(`
         CREATE TABLE IF NOT EXISTS wallet_transactions (
@@ -145,7 +145,7 @@ export function ensureSchema(): Promise<void> {
         `CREATE INDEX IF NOT EXISTS idx_wallet_tx_agent ON wallet_transactions (agent_id, created_at)`,
       );
       // Append-only consumer reading-credit ledger (referral rewards + pack
-      // purchases). UNIQUE(ref) is the idempotency key — Stripe session id for
+      // purchases). UNIQUE(ref) is the idempotency key — Revolut order id for
       // purchases, referral:<refereeId> / referee:<leadId> for referral grants.
       await client.execute(`
         CREATE TABLE IF NOT EXISTS reading_grants (
