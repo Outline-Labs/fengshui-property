@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -131,8 +132,23 @@ export const claims = sqliteTable("claims", {
   claimedAt: integer("claimed_at").notNull(),
 });
 
+// Plan-independent fixed-window rate limiter (Vercel Firewall rate limiting needs
+// a paid plan; this works on any tier). One row per (key, window) — e.g.
+// `signup:<ip>` / `reading:<ip>` — incremented per request; allowed while the
+// window's count stays within the caller's limit. See lib/rate-limit.ts.
+export const rateLimits = sqliteTable(
+  "rate_limits",
+  {
+    key: text("key").notNull(),
+    windowStart: integer("window_start").notNull(), // epoch ms, floored to window
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.windowStart] })],
+);
+
 export type Lead = typeof leads.$inferSelect;
 export type Agent = typeof agents.$inferSelect;
 export type Claim = typeof claims.$inferSelect;
 export type WalletTransaction = typeof walletTransactions.$inferSelect;
 export type ReadingGrant = typeof readingGrants.$inferSelect;
+export type RateLimit = typeof rateLimits.$inferSelect;

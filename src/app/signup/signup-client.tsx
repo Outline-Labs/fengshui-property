@@ -82,6 +82,13 @@ export function SignupClient({
           </div>
         )}
 
+        {error === "ratelimited" && (
+          <div className="border border-cinnabar bg-cinnabar/10 px-5 py-3 mt-6 text-sm">
+            Too many sign-up attempts from your network — please wait a few
+            minutes and try again.
+          </div>
+        )}
+
         <form action={signup} className="mt-8 space-y-8">
           {next && <input type="hidden" name="next" value={next} />}
           {refCode && <input type="hidden" name="ref" value={refCode} />}

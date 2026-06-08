@@ -161,6 +161,16 @@ export function ensureSchema(): Promise<void> {
       await client.execute(
         `CREATE INDEX IF NOT EXISTS idx_reading_grants_lead ON reading_grants (lead_id, created_at)`,
       );
+      // Plan-independent fixed-window rate limiter (see lib/rate-limit.ts) —
+      // Vercel Firewall rate limiting requires a paid plan; this doesn't.
+      await client.execute(`
+        CREATE TABLE IF NOT EXISTS rate_limits (
+          key TEXT NOT NULL,
+          window_start INTEGER NOT NULL,
+          count INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (key, window_start)
+        )
+      `);
     })();
   }
   return ready;

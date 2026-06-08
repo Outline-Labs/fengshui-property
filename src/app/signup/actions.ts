@@ -1,10 +1,12 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { attachReferral } from "@/lib/credits";
 import { upsertLead } from "@/lib/leads";
 import { getPostHogClient } from "@/lib/posthog-server";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { createSession } from "@/lib/session";
 
 function safeNext(next: string | undefined): string {
@@ -15,6 +17,21 @@ export async function signup(formData: FormData) {
   const email = (formData.get("email")?.toString() ?? "").trim();
   const next = formData.get("next")?.toString();
   const ref = formData.get("ref")?.toString();
+
+  // Per-IP throttle: signup is email-only (no verification), so cap submissions
+  // to curb throwaway-account / lead spam. Plan-independent (works on Hobby,
+  // where Vercel Firewall rate limiting isn't available).
+  const rl = await rateLimit({
+    key: `signup:${clientIp(await headers())}`,
+    limit: 10,
+    windowMs: 600_000,
+  });
+  if (!rl.ok) {
+    const q = new URLSearchParams({ error: "ratelimited" });
+    if (next) q.set("next", next);
+    if (ref) q.set("ref", ref);
+    redirect(`/signup?${q.toString()}`);
+  }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     const q = new URLSearchParams({ error: "email" });

@@ -40,6 +40,15 @@ vi.mock("@/lib/reading-cache", () => ({
   putCachedReading: (...a: unknown[]) => putCachedReading(...a),
 }));
 
+// The action reads the client IP + per-IP rate limit on the paid path. Mock both
+// so the suite doesn't need a request context or the DB; rateLimit defaults to ok.
+vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
+const rateLimit = vi.fn(async () => ({ ok: true, count: 1, limit: 12 }));
+vi.mock("@/lib/rate-limit", () => ({
+  rateLimit: (...a: unknown[]) => rateLimit(...a),
+  clientIp: () => "test-ip",
+}));
+
 import { computeUnitReading } from "@/lib/fengshui/unit-reading";
 
 import { analyzeFloorPlan, recomputeReading } from "./actions";
@@ -72,6 +81,7 @@ beforeEach(() => {
   getCachedReading.mockResolvedValue(null);
   getCredits.mockResolvedValue({ remaining: 5 });
   floorPlanReadingsSince.mockResolvedValue(0);
+  rateLimit.mockResolvedValue({ ok: true, count: 1, limit: 12 });
 });
 
 describe("analyzeFloorPlan — input + spend guards", () => {
@@ -97,6 +107,31 @@ describe("analyzeFloorPlan — input + spend guards", () => {
     expect(res.ok).toBe(false);
     expect(analyzeFloorPlanImage).not.toHaveBeenCalled(); // no Kimi spend
     expect(reserveReading).not.toHaveBeenCalled(); // no credit charged
+  });
+
+  it("blocks the paid path when the per-IP rate limit is exceeded (no model call, no credit)", async () => {
+    rateLimit.mockResolvedValue({ ok: false, count: 13, limit: 12 });
+    const res = await analyzeFloorPlan(IMG, "South", 2024);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.error).toMatch(/too many/i);
+    expect(analyzeFloorPlanImage).not.toHaveBeenCalled();
+    expect(reserveReading).not.toHaveBeenCalled();
+  });
+
+  it("does NOT rate-limit a cache hit (free path returns before the limiter)", async () => {
+    getCachedReading.mockResolvedValue({
+      score: 6.4,
+      summary: "cached",
+      facing: "South",
+      confidence: "high" as const,
+      rooms: [],
+      factors: [],
+      recommendations: [],
+    });
+    const res = await analyzeFloorPlan(IMG, "South", 2024);
+    expect(res.ok).toBe(true);
+    expect(rateLimit).not.toHaveBeenCalled();
   });
 });
 

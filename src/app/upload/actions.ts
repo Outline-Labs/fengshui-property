@@ -1,5 +1,7 @@
 "use server";
 
+import { headers } from "next/headers";
+
 import { applyReferralActivation } from "@/lib/credits";
 import { getPostHogClient } from "@/lib/posthog-server";
 import {
@@ -15,6 +17,7 @@ import {
 import { dir8FromString } from "@/lib/fengshui/flying-stars";
 import { computeUnitReading } from "@/lib/fengshui/unit-reading";
 import { analyzeFloorPlanImage } from "@/lib/kimi";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import {
   getCachedReading,
   putCachedReading,
@@ -90,6 +93,23 @@ export async function analyzeFloorPlan(
   if (cached) {
     const { remaining } = await getCredits(leadId);
     return { ok: true, analysis: cached, remaining };
+  }
+
+  // Per-IP throttle on the PAID path (cache hits above are free, so they don't
+  // count). Plan-independent app-level limit that complements the Vercel Firewall
+  // rule and, unlike it, counts only the real reading call — not page GETs / RSC
+  // prefetches.
+  const rl = await rateLimit({
+    key: `reading:${clientIp(await headers())}`,
+    limit: 12,
+    windowMs: 600_000,
+  });
+  if (!rl.ok) {
+    return {
+      ok: false,
+      error:
+        "Too many readings from your network just now — please wait a few minutes.",
+    };
   }
 
   // Global spend ceiling: cap vision-billed reads over a rolling 24h so a burst
