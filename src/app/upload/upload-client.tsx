@@ -7,6 +7,7 @@ import { resendVerification } from "@/app/login/actions";
 import { FlyingStarsGrid } from "@/components/flying-stars-grid";
 import { LuopanCasting } from "@/components/luopan-casting";
 import { TalkToSpecialist } from "@/components/talk-to-specialist";
+import { VerifyPhone } from "@/components/verify-phone";
 import {
   computeFlyingStars,
   type Dir8,
@@ -59,6 +60,7 @@ export function UploadClient({
   errorBanner,
   emailVerified,
   verifyBanner,
+  phoneVerified,
   specialistEnabled,
   specialistRequested,
   specialistPhone,
@@ -71,6 +73,7 @@ export function UploadClient({
   errorBanner?: string;
   emailVerified: boolean;
   verifyBanner?: string;
+  phoneVerified: boolean;
   specialistEnabled: boolean;
   specialistRequested: boolean;
   specialistPhone: string | null;
@@ -217,6 +220,12 @@ export function UploadClient({
             )}
           </div>
         </header>
+
+        {!phoneVerified && (
+          <div className="mb-10 max-w-2xl">
+            <VerifyPhone initialPhone={specialistPhone} />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14">
           {/* Left: upload + controls */}

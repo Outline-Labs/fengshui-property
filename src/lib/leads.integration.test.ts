@@ -8,6 +8,7 @@ import {
   releaseReading,
   reserveReading,
   requestOtp,
+  verifyOtp,
   upsertLead,
   verifyOtpAndRequestAgent,
 } from "./leads";
@@ -39,8 +40,9 @@ describe("reading credits — atomic quota enforcement", () => {
   });
 
   it("never grants more than the quota under concurrency (the cost-leak race)", async () => {
-    // quota 2: email + phone
+    // quota 2: email + verified phone
     const id = await freshLead({ email: "b@test.sg", phone: "91234567" });
+    await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id));
     const results = await Promise.all(
       Array.from({ length: 8 }, () => reserveReading(id)),
     );
@@ -102,6 +104,15 @@ describe("phone verification (Twilio Verify) — dev fallback", () => {
     const row = (await db.select().from(leads))[0];
     expect(row?.phoneVerified).toBe(1);
     expect(row?.wantsAgent).toBe(1);
+  });
+
+  it("consumer verifyOtp verifies the phone WITHOUT flagging wantsAgent", async () => {
+    const id = await freshLead({ email: "g2@test.sg" });
+    await requestOtp(id, "98765432");
+    expect((await verifyOtp(id, "000000")).ok).toBe(true);
+    const row = (await db.select().from(leads))[0];
+    expect(row?.phoneVerified).toBe(1);
+    expect(row?.wantsAgent).toBe(0); // consumer flow — agent surface untouched
   });
 
   it("rejects a wrong code and leaves the lead unsellable", async () => {

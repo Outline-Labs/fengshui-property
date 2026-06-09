@@ -12,6 +12,7 @@ import {
   releaseReading,
   requestOtp,
   reserveReading,
+  verifyOtp,
   verifyOtpAndRequestAgent,
 } from "@/lib/leads";
 import { dir8FromString } from "@/lib/fengshui/flying-stars";
@@ -43,6 +44,22 @@ export async function confirmSpecialist(
   const leadId = await getLeadId();
   if (!leadId) return { ok: false, error: "Please sign up first." };
   return verifyOtpAndRequestAgent(leadId, code);
+}
+
+// Consumer phone verification (no agent involved) — verifying unlocks the +1
+// profile quota bonus. Mirrors the specialist OTP but never sets wantsAgent.
+export async function requestPhoneOtp(phone: string): Promise<OtpResult> {
+  const leadId = await getLeadId();
+  if (!leadId) return { ok: false, error: "Please sign up first." };
+  return requestOtp(leadId, phone);
+}
+
+export async function confirmPhoneOtp(
+  code: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const leadId = await getLeadId();
+  if (!leadId) return { ok: false, error: "Please sign up first." };
+  return verifyOtp(leadId, code);
 }
 
 export type FloorPlanResult =

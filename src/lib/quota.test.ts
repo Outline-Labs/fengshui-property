@@ -3,18 +3,21 @@ import { describe, expect, it } from "vitest";
 import { MAX_QUOTA, computeQuota } from "./quota";
 
 // Spec (product rule): a lead earns free readings by profile completeness.
-//   email only            → 1
-//   + phone               → 2
-//   + name AND timeline    → 3 (capped at MAX_QUOTA)
+//   email only             → 1
+//   + VERIFIED phone        → 2   (entering a number no longer counts — it must
+//                                  be OTP-verified, to stop fake numbers)
+//   + name AND timeline     → 3 (capped at MAX_QUOTA)
 // Name or timeline alone does NOT add a credit; blank/whitespace doesn't count.
 describe("computeQuota", () => {
   it("grants 1 for an email-only lead (no profile fields)", () => {
     expect(computeQuota({})).toBe(1);
-    expect(computeQuota({ phone: null, name: null, timeline: null })).toBe(1);
+    expect(computeQuota({ phoneVerified: 0, name: null, timeline: null })).toBe(1);
   });
 
-  it("adds 1 for a phone number", () => {
-    expect(computeQuota({ phone: "91234567" })).toBe(2);
+  it("adds 1 only for a VERIFIED phone", () => {
+    expect(computeQuota({ phoneVerified: 1 })).toBe(2);
+    expect(computeQuota({ phoneVerified: true })).toBe(2);
+    expect(computeQuota({ phoneVerified: 0 })).toBe(1); // unverified → nothing
   });
 
   it("adds 1 only when BOTH name and timeline are present", () => {
@@ -23,25 +26,24 @@ describe("computeQuota", () => {
     expect(computeQuota({ name: "Wei", timeline: "3 months" })).toBe(2);
   });
 
-  it("reaches the max of 3 with phone + name + timeline", () => {
+  it("reaches the max of 3 with verified phone + name + timeline", () => {
     expect(
-      computeQuota({ phone: "91234567", name: "Wei", timeline: "3 months" }),
+      computeQuota({ phoneVerified: 1, name: "Wei", timeline: "3 months" }),
     ).toBe(3);
     expect(MAX_QUOTA).toBe(3);
   });
 
   it("never exceeds MAX_QUOTA", () => {
     const q = computeQuota({
-      phone: "91234567",
+      phoneVerified: 1,
       name: "Wei Chen",
       timeline: "ASAP",
     });
     expect(q).toBeLessThanOrEqual(MAX_QUOTA);
   });
 
-  it("ignores whitespace-only fields", () => {
-    expect(computeQuota({ phone: "   " })).toBe(1);
+  it("ignores whitespace-only name/timeline", () => {
     expect(computeQuota({ name: "  ", timeline: "  " })).toBe(1);
-    expect(computeQuota({ phone: " ", name: " ", timeline: " " })).toBe(1);
+    expect(computeQuota({ phoneVerified: 0, name: " ", timeline: " " })).toBe(1);
   });
 });

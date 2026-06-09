@@ -62,6 +62,7 @@ export default async function UploadPage({
         errorBanner={error}
         emailVerified={lead.emailVerified === 1}
         verifyBanner={verify}
+        phoneVerified={lead.phoneVerified === 1}
         specialistEnabled={partnersEnabled()}
         specialistRequested={lead.wantsAgent === 1}
         specialistPhone={lead.phone}

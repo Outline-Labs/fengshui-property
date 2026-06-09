@@ -187,10 +187,17 @@ export async function requestOtp(
   return started.devCode ? { ok: true, devCode: started.devCode } : { ok: true };
 }
 
-export async function verifyOtpAndRequestAgent(
+export type VerifyResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Verify a phone OTP and mark the phone verified — consumer-safe: it does NOT
+ * flag wantsAgent. A verified phone unlocks the profile quota bonus (see
+ * computeQuota), so this is the anti-fake-number gate on that free reading.
+ */
+export async function verifyOtp(
   leadId: string,
   code: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<VerifyResult> {
   await ensureSchema();
   const lead = await getLead(leadId);
   if (!lead) return { ok: false, error: "Session expired — please refresh." };
@@ -206,12 +213,24 @@ export async function verifyOtpAndRequestAgent(
   }
   await db
     .update(leads)
-    .set({
-      phoneVerified: 1,
-      wantsAgent: 1,
-      verifiedAt: Date.now(),
-      updatedAt: Date.now(),
-    })
+    .set({ phoneVerified: 1, verifiedAt: Date.now(), updatedAt: Date.now() })
+    .where(eq(leads.id, leadId));
+  return { ok: true };
+}
+
+/**
+ * Verify the phone AND flag the lead as wanting an agent — the partner-surface
+ * "talk to a specialist" bridge (v2, gated off in prod). Reuses verifyOtp.
+ */
+export async function verifyOtpAndRequestAgent(
+  leadId: string,
+  code: string,
+): Promise<VerifyResult> {
+  const r = await verifyOtp(leadId, code);
+  if (!r.ok) return r;
+  await db
+    .update(leads)
+    .set({ wantsAgent: 1, updatedAt: Date.now() })
     .where(eq(leads.id, leadId));
   return { ok: true };
 }
