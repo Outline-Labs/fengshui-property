@@ -51,11 +51,10 @@ export function SignupClient({
   );
   const [timeline, setTimeline] = useState(initial?.timeline ?? "");
 
-  // First + last name are mandatory; phone counts toward the quota only once
-  // OTP-verified (done after signup on /upload). The preview reflects
-  // email + (name && timeline).
-  const name = `${firstName} ${lastName}`.trim();
-  const quota = computeQuota({ name, timeline });
+  // First + last name are mandatory; the phone +1 is earned after signup via
+  // OTP on /upload, so the preview reflects only the base + the intent tier
+  // (a buying timeline AND a property of interest, together).
+  const quota = computeQuota({ timeline, propertyInterest });
 
   return (
     <main className="flex-1 px-6 sm:px-10 py-12 sm:py-16">
@@ -168,7 +167,7 @@ export function SignupClient({
               />
             </Field>
 
-            <Field label="Buying timeline" cn="时间" hint="Unlocks +1">
+            <Field label="Buying timeline" cn="时间" hint="Unlocks +1 with a property">
               <select
                 name="timeline"
                 value={timeline}
@@ -185,7 +184,7 @@ export function SignupClient({
             </Field>
           </div>
 
-          <Field label="Property of interest" cn="目标房产">
+          <Field label="Property of interest" cn="目标房产" hint="Unlocks +1 with a timeline">
             <input
               name="propertyInterest"
               value={propertyInterest}

@@ -237,6 +237,7 @@ describe("getCredits — quota / used / remaining math", () => {
       phone: "91234567",
       name: "Ivy",
       timeline: "soon",
+      propertyInterest: "Tampines condo",
     });
     await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id));
     const c = await getCredits(id);
@@ -269,12 +270,13 @@ describe("getCredits — quota / used / remaining math", () => {
     expect(c.remaining).toBe(2);
   });
 
-  it("verified email + verified phone + name + timeline lead → quota 3 (capped)", async () => {
+  it("verified email + verified phone + timeline + property → quota 3 (capped)", async () => {
     const id = await verifiedLead({
       email: "q3@test.sg",
       phone: "91234567",
       name: "Helen",
       timeline: "2 months",
+      propertyInterest: "a 3-bedder in Bishan",
     });
     await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id));
     const c = await getCredits(id);
