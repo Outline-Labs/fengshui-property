@@ -230,27 +230,36 @@ describe("getCredits — quota / used / remaining math", () => {
     expect(c.remaining).toBe(1);
   });
 
-  it("email + phone lead → quota 2", async () => {
+  it("email + UNVERIFIED phone lead → quota 1 (a number alone no longer counts)", async () => {
+    const id = await upsertLead({ email: "q2u0@test.sg", phone: "91234567" });
+    const c = await getCredits(id);
+    expect(c.quota).toBe(1);
+  });
+
+  it("email + VERIFIED phone lead → quota 2", async () => {
     const id = await upsertLead({ email: "q2@test.sg", phone: "91234567" });
+    await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id));
     const c = await getCredits(id);
     expect(c.quota).toBe(2);
     expect(c.remaining).toBe(2);
   });
 
-  it("email + phone + name + timeline lead → quota 3 (capped)", async () => {
+  it("email + verified phone + name + timeline lead → quota 3 (capped)", async () => {
     const id = await upsertLead({
       email: "q3@test.sg",
       phone: "91234567",
       name: "Helen",
       timeline: "2 months",
     });
+    await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id));
     const c = await getCredits(id);
     expect(c.quota).toBe(3);
     expect(c.remaining).toBe(3);
   });
 
   it("reflects used and remaining after a reservation", async () => {
-    const id = await upsertLead({ email: "q2u@test.sg", phone: "91234567" }); // quota 2
+    const id = await upsertLead({ email: "q2u@test.sg", phone: "91234567" });
+    await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id)); // verified → quota 2
     const r = await reserveReading(id);
     expect(r.ok).toBe(true);
 
@@ -316,8 +325,9 @@ describe("finalizeReading & releaseReading", () => {
   });
 
   it("releasing one of several reservations frees exactly one credit", async () => {
-    // quota 2: email + phone
+    // quota 2: email + verified phone
     const id = await upsertLead({ email: "rel2@test.sg", phone: "91234567" });
+    await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id));
     const r1 = await reserveReading(id);
     const r2 = await reserveReading(id);
     expect(r1.ok && r2.ok).toBe(true);

@@ -7,6 +7,7 @@ import { resendVerification } from "@/app/login/actions";
 import { FlyingStarsGrid } from "@/components/flying-stars-grid";
 import { LuopanCasting } from "@/components/luopan-casting";
 import { TalkToSpecialist } from "@/components/talk-to-specialist";
+import { VerifyPhone } from "@/components/verify-phone";
 import {
   computeFlyingStars,
   type Dir8,
@@ -59,6 +60,7 @@ export function UploadClient({
   errorBanner,
   emailVerified,
   verifyBanner,
+  phoneVerified,
   specialistEnabled,
   specialistRequested,
   specialistPhone,
@@ -71,6 +73,7 @@ export function UploadClient({
   errorBanner?: string;
   emailVerified: boolean;
   verifyBanner?: string;
+  phoneVerified: boolean;
   specialistEnabled: boolean;
   specialistRequested: boolean;
   specialistPhone: string | null;
@@ -338,6 +341,9 @@ export function UploadClient({
                     )}
                   </div>
                   <ReferralInvite {...credit} />
+                  {!phoneVerified && (
+                    <VerifyPhone initialPhone={specialistPhone} />
+                  )}
                   <BuyReadings packs={credit.packs} revolutReady={credit.revolutReady} />
                 </div>
               ) : (

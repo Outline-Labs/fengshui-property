@@ -41,7 +41,9 @@ export function SignupClient({
   );
   const [timeline, setTimeline] = useState(initial?.timeline ?? "");
 
-  const quota = computeQuota({ phone, name, timeline });
+  // Phone no longer counts toward the quota until it's OTP-verified (done after
+  // signup on /upload), so the preview reflects only email + name&timeline.
+  const quota = computeQuota({ name, timeline });
 
   return (
     <main className="flex-1 px-6 sm:px-10 py-12 sm:py-16">
@@ -123,7 +125,7 @@ export function SignupClient({
               />
             </Field>
 
-            <Field label="Phone / WhatsApp" cn="联络" hint="Unlocks +1 reading">
+            <Field label="Phone / WhatsApp" cn="联络" hint="Verify after signup for +1">
               <input
                 name="phone"
                 type="tel"
