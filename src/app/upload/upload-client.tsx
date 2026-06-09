@@ -221,6 +221,12 @@ export function UploadClient({
           </div>
         </header>
 
+        {!phoneVerified && (
+          <div className="mb-10 max-w-2xl">
+            <VerifyPhone initialPhone={specialistPhone} />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14">
           {/* Left: upload + controls */}
           <section className="space-y-8">
@@ -341,9 +347,6 @@ export function UploadClient({
                     )}
                   </div>
                   <ReferralInvite {...credit} />
-                  {!phoneVerified && (
-                    <VerifyPhone initialPhone={specialistPhone} />
-                  )}
                   <BuyReadings packs={credit.packs} revolutReady={credit.revolutReady} />
                 </div>
               ) : (
