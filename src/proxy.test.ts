@@ -18,6 +18,25 @@ function rewriteTarget(res: ReturnType<typeof proxy>): string | null {
   return h ? new URL(h).pathname : null;
 }
 
+describe("proxy — maintenance mode (MAINTENANCE_MODE)", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("serves a 503 holding page for any route, short-circuiting host routing", () => {
+    vi.stubEnv("MAINTENANCE_MODE", "true");
+    const res = proxy(req(CONSUMER, "/upload"));
+    expect(res.status).toBe(503);
+    expect(res.headers.get("retry-after")).toBe("3600");
+    // applies to the partner host too (runs before any routing)
+    expect(proxy(req(PARTNER, "/dashboard")).status).toBe(503);
+  });
+
+  it("does NOT intercept when MAINTENANCE_MODE is unset or false", () => {
+    expect(proxy(req(CONSUMER, "/")).status).not.toBe(503);
+    vi.stubEnv("MAINTENANCE_MODE", "false");
+    expect(proxy(req(CONSUMER, "/")).status).not.toBe(503);
+  });
+});
+
 describe("proxy — partner host routing", () => {
   it("rewrites clean partner URLs onto /p and marks them noindex", () => {
     const res = proxy(req(PARTNER, "/dashboard"));
