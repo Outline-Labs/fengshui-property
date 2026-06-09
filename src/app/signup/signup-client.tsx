@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useFormStatus } from "react-dom";
 
 import { MAX_QUOTA, computeQuota } from "@/lib/quota";
 
@@ -195,13 +196,7 @@ export function SignupClient({
           </Field>
 
           <div className="pt-2">
-            <button
-              type="submit"
-              className="font-display text-xl text-cinnabar inline-flex items-center gap-2 hover:translate-x-1 transition-transform"
-            >
-              {returning ? "Save & continue" : "Create account"}{" "}
-              <span aria-hidden>→</span>
-            </button>
+            <SubmitButton returning={returning} />
             <p className="text-[10px] tracking-wide text-muted mt-5 max-w-md leading-relaxed">
               By continuing you agree we may contact you about your readings and
               your interest. See our privacy policy.
@@ -210,6 +205,38 @@ export function SignupClient({
         </form>
       </div>
     </main>
+  );
+}
+
+// Reads the form's pending state (useFormStatus must live in a child of the
+// <form>). While the signup action runs, the button is disabled and shows a
+// spinner — so a double-tap can't submit twice (and re-send the verification
+// email / re-create the session).
+function SubmitButton({ returning }: { returning?: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      aria-busy={pending}
+      className="font-display text-xl text-cinnabar inline-flex items-center gap-2 transition-transform hover:translate-x-1 disabled:cursor-not-allowed disabled:opacity-50 disabled:translate-x-0"
+    >
+      {pending
+        ? returning
+          ? "Saving…"
+          : "Creating account…"
+        : returning
+          ? "Save & continue"
+          : "Create account"}{" "}
+      {pending ? (
+        <span
+          aria-hidden
+          className="inline-block h-[1.1em] w-[1.1em] animate-spin rounded-full border-2 border-current border-t-transparent"
+        />
+      ) : (
+        <span aria-hidden>→</span>
+      )}
+    </button>
   );
 }
 
