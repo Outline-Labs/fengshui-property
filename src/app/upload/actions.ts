@@ -9,6 +9,7 @@ import {
   finalizeReading,
   floorPlanReadingsSince,
   getCredits,
+  getLead,
   releaseReading,
   requestOtp,
   reserveReading,
@@ -64,7 +65,11 @@ export async function confirmPhoneOtp(
 
 export type FloorPlanResult =
   | { ok: true; analysis: FloorPlanAnalysis; remaining: number }
-  | { ok: false; error: string; code?: "no_session" | "out_of_credits" };
+  | {
+      ok: false;
+      error: string;
+      code?: "no_session" | "out_of_credits" | "verify_email";
+    };
 
 // Server-side guard: the client resizes to a small JPEG, but a direct call could
 // bypass that, so allowlist real raster MIME types (no SVG) and cap the decoded
@@ -98,6 +103,20 @@ export async function analyzeFloorPlan(
   const leadId = await getLeadId();
   if (!leadId) {
     return { ok: false, error: "Please sign up to read your unit.", code: "no_session" };
+  }
+
+  // No reading — cached or paid — before the email is verified. Checked here so
+  // the free cache-hit path below is gated too, not just reserveReading.
+  const lead = await getLead(leadId);
+  if (!lead) {
+    return { ok: false, error: "Please sign up to read your unit.", code: "no_session" };
+  }
+  if (lead.emailVerified !== 1) {
+    return {
+      ok: false,
+      error: "Please verify your email first — we sent you a link.",
+      code: "verify_email",
+    };
   }
 
   const year = yearBuilt && yearBuilt > 1900 ? yearBuilt : undefined;
@@ -144,13 +163,21 @@ export async function analyzeFloorPlan(
   // can't overspend the quota; refund it if the analysis fails.
   const reservation = await reserveReading(leadId, "floor_plan");
   if (!reservation.ok) {
-    return reservation.reason === "no_session"
-      ? { ok: false, error: "Please sign up to read your unit.", code: "no_session" }
-      : {
-          ok: false,
-          error: "You've used all your free readings.",
-          code: "out_of_credits",
-        };
+    if (reservation.reason === "no_session") {
+      return { ok: false, error: "Please sign up to read your unit.", code: "no_session" };
+    }
+    if (reservation.reason === "verify_email") {
+      return {
+        ok: false,
+        error: "Please verify your email first — we sent you a link.",
+        code: "verify_email",
+      };
+    }
+    return {
+      ok: false,
+      error: "You've used all your free readings.",
+      code: "out_of_credits",
+    };
   }
 
   try {

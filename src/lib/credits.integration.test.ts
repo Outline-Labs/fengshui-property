@@ -72,6 +72,7 @@ describe("grantReadings — credits land exactly once", () => {
 describe("bonus readings extend the free quota", () => {
   it("lets a quota-1 lead reserve 1 + bonus readings, then blocks the next", async () => {
     const id = await upsertLead({ email: "q@test.sg" }); // email-only ⇒ free quota 1
+    await db.update(leads).set({ emailVerified: 1 }).where(eq(leads.id, id)); // credits need a verified email
     await grantReadings({ leadId: id, amount: 2, kind: "purchase", ref: "p" });
 
     // 1 free + 2 bonus = 3 reservable
