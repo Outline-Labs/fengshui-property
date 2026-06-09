@@ -25,8 +25,20 @@ export async function sendEmail(
       },
       body: JSON.stringify({ from, to, subject, text }),
     });
+    if (!res.ok) {
+      // Surface the reason rather than silently dropping it. The classic case
+      // is a 403 for an unverified sender domain — otherwise invisible because
+      // callers treat email as best-effort.
+      const detail = await res.text().catch(() => "");
+      console.error(
+        `[email] Resend rejected send to ${to} (from ${from}): ${res.status} ${detail.slice(0, 400)}`,
+      );
+    }
     return { ok: res.ok };
-  } catch {
+  } catch (e) {
+    console.error(
+      `[email] send to ${to} threw: ${e instanceof Error ? e.message : String(e)}`,
+    );
     return { ok: false };
   }
 }
