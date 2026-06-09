@@ -85,27 +85,41 @@ describe("sendEmail — Resend API (RESEND_API_KEY set)", () => {
     );
   });
 
-  it("returns ok=false when the Resend response is not ok (e.g. 422)", async () => {
+  it("returns ok=false AND logs the status + reason when Resend rejects (403 unverified domain)", async () => {
     vi.stubEnv("RESEND_API_KEY", "re_test_key_123");
 
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 422 });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: async () =>
+        JSON.stringify({ message: "The fengshuiai.sg domain is not verified." }),
+    });
     vi.stubGlobal("fetch", fetchMock);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const result = await sendEmail("a@b.com", "Subj", "Body");
 
     expect(result).toEqual({ ok: false });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    // The reason must be surfaced — this is the bug that hid the missing
+    // verification email (a swallowed 403).
+    expect(errSpy).toHaveBeenCalledOnce();
+    const logged = String(errSpy.mock.calls[0][0]);
+    expect(logged).toContain("403");
+    expect(logged).toContain("not verified");
   });
 
-  it("returns ok=false when fetch rejects (network error)", async () => {
+  it("returns ok=false AND logs when fetch rejects (network error)", async () => {
     vi.stubEnv("RESEND_API_KEY", "re_test_key_123");
 
     const fetchMock = vi.fn().mockRejectedValue(new Error("network down"));
     vi.stubGlobal("fetch", fetchMock);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const result = await sendEmail("a@b.com", "Subj", "Body");
 
     expect(result).toEqual({ ok: false });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(errSpy).toHaveBeenCalledOnce();
   });
 });
