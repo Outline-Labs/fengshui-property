@@ -89,6 +89,8 @@ export function UploadClient({
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const outOfCredits = remaining <= 0;
+  // What verifying the email unlocks (profile free quota + any bonus credits).
+  const potential = credit.freeQuota + credit.bonusReadings;
   const banner = bannerMessage(creditsBanner, errorBanner);
 
   const handleFile = async (file: File | undefined) => {
@@ -132,7 +134,11 @@ export function UploadClient({
         return;
       }
       setError(result.error);
-      setStatus(result.code === "out_of_credits" ? "ready" : "error");
+      setStatus(
+        result.code === "out_of_credits" || result.code === "verify_email"
+          ? "ready"
+          : "error",
+      );
     }
   };
 
@@ -176,8 +182,8 @@ export function UploadClient({
           <div className="mb-8 flex flex-wrap items-center justify-between gap-3 border border-cinnabar bg-cinnabar/5 px-5 py-3 text-sm">
             <span className="text-ink-soft">
               {verifyBanner === "sent"
-                ? "Verification link sent — check your email to finish."
-                : "Verify your email to secure your account and buy reading credits."}
+                ? "Verification link sent — check your email to unlock your readings."
+                : "Verify your email to unlock your free readings and secure your account."}
             </span>
             {verifyBanner !== "sent" && (
               <form action={resendVerification}>
@@ -201,27 +207,39 @@ export function UploadClient({
             (Period 9), and eight mansions — room by room.
           </p>
           <div className="mt-6 flex items-center gap-4 text-[11px] tracking-wide">
-            <span className="inline-flex items-center gap-2 border border-line px-3 py-1.5">
-              <span className={outOfCredits ? "text-muted" : "text-jade"}>●</span>
-              <span className="text-ink-soft">
-                {remaining} of {quota} reading{quota === 1 ? "" : "s"} left
-                {credit.bonusReadings > 0 && (
-                  <span className="text-muted"> · {credit.bonusReadings} bonus</span>
+            {emailVerified ? (
+              <>
+                <span className="inline-flex items-center gap-2 border border-line px-3 py-1.5">
+                  <span className={outOfCredits ? "text-muted" : "text-jade"}>●</span>
+                  <span className="text-ink-soft">
+                    {remaining} of {quota} reading{quota === 1 ? "" : "s"} left
+                    {credit.bonusReadings > 0 && (
+                      <span className="text-muted"> · {credit.bonusReadings} bonus</span>
+                    )}
+                  </span>
+                </span>
+                {canUpgrade && (
+                  <a
+                    href="/signup?next=/upload"
+                    className="text-cinnabar hover:underline tracking-wide"
+                  >
+                    Complete your profile for more →
+                  </a>
                 )}
+              </>
+            ) : (
+              <span className="inline-flex items-center gap-2 border border-cinnabar px-3 py-1.5">
+                <span className="text-cinnabar">●</span>
+                <span className="text-ink-soft">
+                  Verify your email to unlock {potential} free reading
+                  {potential === 1 ? "" : "s"}
+                </span>
               </span>
-            </span>
-            {canUpgrade && (
-              <a
-                href="/signup?next=/upload"
-                className="text-cinnabar hover:underline tracking-wide"
-              >
-                Complete your profile for more →
-              </a>
             )}
           </div>
         </header>
 
-        {!phoneVerified && (
+        {emailVerified && !phoneVerified && (
           <div className="mb-10 max-w-2xl">
             <VerifyPhone initialPhone={specialistPhone} />
           </div>
@@ -325,7 +343,18 @@ export function UploadClient({
             </div>
 
             <div className="pt-2">
-              {outOfCredits ? (
+              {!emailVerified ? (
+                <div className="border-t border-cinnabar pt-5">
+                  <div className="text-[10px] tracking-[0.3em] uppercase text-cinnabar mb-2">
+                    Verify your email first
+                  </div>
+                  <p className="text-ink-soft text-sm leading-relaxed max-w-sm">
+                    Your {potential} free reading{potential === 1 ? "" : "s"} unlock
+                    the moment you click the verification link we emailed you. Use
+                    &ldquo;Resend link&rdquo; above if it hasn&rsquo;t arrived.
+                  </p>
+                </div>
+              ) : outOfCredits ? (
                 <div className="border-t border-cinnabar pt-5 space-y-8">
                   <div>
                     <div className="text-[10px] tracking-[0.3em] uppercase text-cinnabar mb-2">

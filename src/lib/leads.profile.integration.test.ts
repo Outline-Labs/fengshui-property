@@ -19,6 +19,15 @@ beforeEach(async () => {
   await db.delete(leads);
 });
 
+// A lead that has cleared email verification — the precondition for any credit.
+// The getCredits / reserve specs below use this; the unverified case is tested
+// explicitly.
+async function verifiedLead(profile: Parameters<typeof upsertLead>[0]) {
+  const id = await upsertLead(profile);
+  await db.update(leads).set({ emailVerified: 1 }).where(eq(leads.id, id));
+  return id;
+}
+
 // ---------------------------------------------------------------------------
 // upsertLead is the single entry point for a lead's profile. It must:
 //   • create a brand-new lead with a stable UUID id,
@@ -221,8 +230,24 @@ describe("getCredits — quota / used / remaining math", () => {
     });
   });
 
-  it("email-only lead → quota 1, nothing used yet", async () => {
-    const id = await upsertLead({ email: "q1@test.sg" });
+  it("UNVERIFIED email → 0 spendable credit regardless of profile (potential still reported)", async () => {
+    // A full profile + verified phone, but the EMAIL isn't verified → no credit.
+    const id = await upsertLead({
+      email: "unverified@test.sg",
+      phone: "91234567",
+      name: "Ivy",
+      timeline: "soon",
+    });
+    await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id));
+    const c = await getCredits(id);
+    expect(c.quota).toBe(0);
+    expect(c.remaining).toBe(0);
+    // freeQuota still reports what verifying WOULD unlock — drives the UI prompt.
+    expect(c.freeQuota).toBe(3);
+  });
+
+  it("verified email-only lead → quota 1, nothing used yet", async () => {
+    const id = await verifiedLead({ email: "q1@test.sg" });
     const c = await getCredits(id);
     expect(c.lead?.id).toBe(id);
     expect(c.quota).toBe(1);
@@ -230,22 +255,22 @@ describe("getCredits — quota / used / remaining math", () => {
     expect(c.remaining).toBe(1);
   });
 
-  it("email + UNVERIFIED phone lead → quota 1 (a number alone no longer counts)", async () => {
-    const id = await upsertLead({ email: "q2u0@test.sg", phone: "91234567" });
+  it("verified email + UNVERIFIED phone lead → quota 1 (a number alone no longer counts)", async () => {
+    const id = await verifiedLead({ email: "q2u0@test.sg", phone: "91234567" });
     const c = await getCredits(id);
     expect(c.quota).toBe(1);
   });
 
-  it("email + VERIFIED phone lead → quota 2", async () => {
-    const id = await upsertLead({ email: "q2@test.sg", phone: "91234567" });
+  it("verified email + VERIFIED phone lead → quota 2", async () => {
+    const id = await verifiedLead({ email: "q2@test.sg", phone: "91234567" });
     await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id));
     const c = await getCredits(id);
     expect(c.quota).toBe(2);
     expect(c.remaining).toBe(2);
   });
 
-  it("email + verified phone + name + timeline lead → quota 3 (capped)", async () => {
-    const id = await upsertLead({
+  it("verified email + verified phone + name + timeline lead → quota 3 (capped)", async () => {
+    const id = await verifiedLead({
       email: "q3@test.sg",
       phone: "91234567",
       name: "Helen",
@@ -258,8 +283,8 @@ describe("getCredits — quota / used / remaining math", () => {
   });
 
   it("reflects used and remaining after a reservation", async () => {
-    const id = await upsertLead({ email: "q2u@test.sg", phone: "91234567" });
-    await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id)); // verified → quota 2
+    const id = await verifiedLead({ email: "q2u@test.sg", phone: "91234567" });
+    await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id)); // → quota 2
     const r = await reserveReading(id);
     expect(r.ok).toBe(true);
 
@@ -270,7 +295,7 @@ describe("getCredits — quota / used / remaining math", () => {
   });
 
   it("clamps remaining at 0 and never reports negative once the quota is spent", async () => {
-    const id = await upsertLead({ email: "spent@test.sg" }); // quota 1
+    const id = await verifiedLead({ email: "spent@test.sg" }); // quota 1
     expect((await reserveReading(id)).ok).toBe(true);
     // A second reserve is refused, so used stays at the quota, not above it.
     expect((await reserveReading(id)).ok).toBe(false);
@@ -289,7 +314,7 @@ describe("getCredits — quota / used / remaining math", () => {
 // ---------------------------------------------------------------------------
 describe("finalizeReading & releaseReading", () => {
   it("finalize records facing + score onto the reserved reading without spending a new credit", async () => {
-    const id = await upsertLead({ email: "fin@test.sg" }); // quota 1
+    const id = await verifiedLead({ email: "fin@test.sg" }); // quota 1
     const r = await reserveReading(id);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -305,7 +330,7 @@ describe("finalizeReading & releaseReading", () => {
   });
 
   it("release deletes the reservation and frees the credit for reuse", async () => {
-    const id = await upsertLead({ email: "rel@test.sg" }); // quota 1
+    const id = await verifiedLead({ email: "rel@test.sg" }); // quota 1
     const r = await reserveReading(id);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -326,7 +351,7 @@ describe("finalizeReading & releaseReading", () => {
 
   it("releasing one of several reservations frees exactly one credit", async () => {
     // quota 2: email + verified phone
-    const id = await upsertLead({ email: "rel2@test.sg", phone: "91234567" });
+    const id = await verifiedLead({ email: "rel2@test.sg", phone: "91234567" });
     await db.update(leads).set({ phoneVerified: 1 }).where(eq(leads.id, id));
     const r1 = await reserveReading(id);
     const r2 = await reserveReading(id);

@@ -14,14 +14,17 @@ const reserveReading = vi.fn(async () => ({ ok: true, id: "res-1", remaining: 2 
 const finalizeReading = vi.fn(async () => {});
 const releaseReading = vi.fn(async () => {});
 const getCredits = vi.fn(async () => ({ remaining: 5 }));
+const getLead = vi.fn(async () => ({ emailVerified: 1 }));
 const floorPlanReadingsSince = vi.fn(async () => 0);
 vi.mock("@/lib/leads", () => ({
   reserveReading: (...a: unknown[]) => reserveReading(...a),
   finalizeReading: (...a: unknown[]) => finalizeReading(...a),
   releaseReading: (...a: unknown[]) => releaseReading(...a),
   getCredits: (...a: unknown[]) => getCredits(...a),
+  getLead: (...a: unknown[]) => getLead(...a),
   floorPlanReadingsSince: (...a: unknown[]) => floorPlanReadingsSince(...a),
   requestOtp: vi.fn(),
+  verifyOtp: vi.fn(),
   verifyOtpAndRequestAgent: vi.fn(),
 }));
 
@@ -80,11 +83,33 @@ beforeEach(() => {
   analyzeFloorPlanImage.mockResolvedValue(LLM);
   getCachedReading.mockResolvedValue(null);
   getCredits.mockResolvedValue({ remaining: 5 });
+  getLead.mockResolvedValue({ emailVerified: 1 });
   floorPlanReadingsSince.mockResolvedValue(0);
   rateLimit.mockResolvedValue({ ok: true, count: 1, limit: 12 });
 });
 
 describe("analyzeFloorPlan — input + spend guards", () => {
+  it("blocks an UNVERIFIED-email lead before any reading (even the free cache path)", async () => {
+    getLead.mockResolvedValue({ emailVerified: 0 });
+    // Even a cache hit must not be served to an unverified lead.
+    getCachedReading.mockResolvedValue({
+      score: 6,
+      summary: "x",
+      facing: "South",
+      confidence: "high" as const,
+      rooms: [],
+      factors: [],
+      recommendations: [],
+    });
+    const res = await analyzeFloorPlan(IMG, "South", 2024);
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.code).toBe("verify_email");
+    expect(getCachedReading).not.toHaveBeenCalled(); // gated above the cache
+    expect(analyzeFloorPlanImage).not.toHaveBeenCalled();
+    expect(reserveReading).not.toHaveBeenCalled();
+  });
+
   it("rejects a non-raster (e.g. SVG) image before any model call", async () => {
     const res = await analyzeFloorPlan("data:image/svg+xml,<svg/>", "South", 2024);
     expect(res.ok).toBe(false);

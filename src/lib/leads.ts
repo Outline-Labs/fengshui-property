@@ -237,7 +237,7 @@ export async function verifyOtpAndRequestAgent(
 
 export type ReserveResult =
   | { ok: true; id: string; remaining: number }
-  | { ok: false; reason: "no_session" | "out_of_credits" };
+  | { ok: false; reason: "no_session" | "out_of_credits" | "verify_email" };
 
 /**
  * Atomically claim one reading credit. The conditional INSERT ... WHERE
@@ -252,6 +252,9 @@ export async function reserveReading(
   await ensureSchema();
   const lead = await getLead(leadId);
   if (!lead) return { ok: false, reason: "no_session" };
+  // No reading before email verification — verifying is the gate to every
+  // credit (profile + bonus quota stays "potential" until then).
+  if (lead.emailVerified !== 1) return { ok: false, reason: "verify_email" };
   // Effective allowance = profile-based free quota + credits earned/bought.
   const quota = computeQuota(lead) + lead.bonusReadings;
   const id = crypto.randomUUID();
@@ -313,20 +316,24 @@ export async function getCredits(leadId: string): Promise<Credits> {
   if (!lead) {
     return { lead: null, quota: 0, freeQuota: 0, bonusReadings: 0, used: 0, remaining: 0 };
   }
+  // freeQuota + bonusReadings are the POTENTIAL allowance (what verifying the
+  // email unlocks); quota + remaining are the SPENDABLE allowance, which stays
+  // 0 until the email is verified — no credit before verification.
+  const verified = lead.emailVerified === 1;
   const freeQuota = computeQuota(lead);
   const bonusReadings = lead.bonusReadings;
-  const quota = freeQuota + bonusReadings;
   const rows = await db
     .select({ id: analyses.id })
     .from(analyses)
     .where(eq(analyses.leadId, leadId));
   const used = rows.length;
+  const quota = verified ? freeQuota + bonusReadings : 0;
   return {
     lead,
     quota,
     freeQuota,
     bonusReadings,
     used,
-    remaining: Math.max(0, quota - used),
+    remaining: verified ? Math.max(0, quota - used) : 0,
   };
 }

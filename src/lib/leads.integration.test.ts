@@ -14,7 +14,11 @@ import {
 } from "./leads";
 
 async function freshLead(profile: Parameters<typeof upsertLead>[0]) {
-  return upsertLead(profile);
+  const id = await upsertLead(profile);
+  // Email verification is the precondition for any reading credit, so the
+  // quota / reserve specs below operate on a verified lead.
+  await db.update(leads).set({ emailVerified: 1 }).where(eq(leads.id, id));
+  return id;
 }
 
 beforeEach(async () => {
@@ -30,6 +34,15 @@ beforeEach(async () => {
 // paid Kimi call, so a TOCTOU race is a direct cost leak).
 // ---------------------------------------------------------------------------
 describe("reading credits — atomic quota enforcement", () => {
+  it("refuses to reserve for an UNVERIFIED-email lead (no credit before verification)", async () => {
+    const id = await upsertLead({ email: "unverified@test.sg" }); // email NOT verified
+    const r = await reserveReading(id);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("verify_email");
+    // nothing was reserved — the paid path never opens
+    expect(await db.select().from(analyses)).toHaveLength(0);
+  });
+
   it("lets an email-only lead (quota 1) reserve exactly once", async () => {
     const id = await freshLead({ email: "a@test.sg" });
     const first = await reserveReading(id);

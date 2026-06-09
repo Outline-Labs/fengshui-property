@@ -75,9 +75,9 @@ export function SignupClient({
           )}
         </h1>
         <p className="mt-5 text-ink-soft leading-relaxed max-w-lg">
-          Your email unlocks one free unit-level reading. The more we know about
-          what you&rsquo;re looking for, the more readings we open up — up to
-          three.
+          Verify your email to unlock your first free unit-level reading. The
+          more we know about what you&rsquo;re looking for, the more readings we
+          open up — up to three.
         </p>
 
         {refCode && !returning && (
