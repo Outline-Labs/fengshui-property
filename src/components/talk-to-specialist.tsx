@@ -31,7 +31,7 @@ export function TalkToSpecialist({
         </p>
         <p className="text-sm text-ink-soft mt-2">
           Your number is verified and your interest has been shared with a
-          CEA-licensed agent in your area.
+          local fengshui specialist in your area.
         </p>
       </section>
     );
@@ -72,8 +72,8 @@ export function TalkToSpecialist({
         Talk to a local specialist — free.
       </p>
       <p className="text-sm text-ink-soft mb-5 max-w-sm">
-        A CEA-licensed agent who knows the area and respects fengshui. We verify
-        your number so only you can make this request.
+        A vetted local specialist who knows the area and understands fengshui. We
+        verify your number so only you can make this request.
       </p>
 
       {step === "phone" ? (
@@ -132,8 +132,8 @@ export function TalkToSpecialist({
 
       {err && <p className="text-sm text-cinnabar mt-3">{err}</p>}
       <p className="text-[10px] tracking-wide text-muted mt-4 max-w-sm leading-relaxed">
-        By verifying, you consent to be contacted by a matched property agent
-        about this property. See our privacy notice.
+        By verifying, you consent to be contacted by a matched specialist about
+        this property. See our privacy notice.
       </p>
     </section>
   );
