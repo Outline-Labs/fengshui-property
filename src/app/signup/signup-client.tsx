@@ -21,6 +21,13 @@ const TIMELINES = [
   "Just exploring",
 ];
 
+// Existing leads store one "First Last" string; split it back into the two
+// fields (everything after the first token is the last name).
+function splitName(full: string): { first: string; last: string } {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  return { first: parts[0] ?? "", last: parts.slice(1).join(" ") };
+}
+
 export function SignupClient({
   next,
   error,
@@ -34,15 +41,19 @@ export function SignupClient({
   returning?: boolean;
   refCode?: string;
 }) {
-  const [name, setName] = useState(initial?.name ?? "");
+  const initialName = splitName(initial?.name ?? "");
+  const [firstName, setFirstName] = useState(initialName.first);
+  const [lastName, setLastName] = useState(initialName.last);
   const [phone, setPhone] = useState(initial?.phone ?? "");
   const [propertyInterest, setPropertyInterest] = useState(
     initial?.propertyInterest ?? "",
   );
   const [timeline, setTimeline] = useState(initial?.timeline ?? "");
 
-  // Phone no longer counts toward the quota until it's OTP-verified (done after
-  // signup on /upload), so the preview reflects only email + name&timeline.
+  // First + last name are mandatory; phone counts toward the quota only once
+  // OTP-verified (done after signup on /upload). The preview reflects
+  // email + (name && timeline).
+  const name = `${firstName} ${lastName}`.trim();
   const quota = computeQuota({ name, timeline });
 
   return (
@@ -98,6 +109,12 @@ export function SignupClient({
           </div>
         )}
 
+        {error === "name" && (
+          <div className="border border-cinnabar bg-cinnabar/10 px-5 py-3 mt-6 text-sm">
+            Please enter both your first and last name.
+          </div>
+        )}
+
         <form action={signup} className="mt-8 space-y-8">
           {next && <input type="hidden" name="next" value={next} />}
           {refCode && <input type="hidden" name="ref" value={refCode} />}
@@ -115,16 +132,30 @@ export function SignupClient({
           </Field>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-            <Field label="Name" cn="姓名" hint="Unlocks +1 with a timeline">
+            <Field label="First name" cn="名" required>
               <input
-                name="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Optional"
-                className="w-full bg-transparent border-b-2 border-line focus:border-cinnabar transition-colors py-2 text-base placeholder:text-muted focus:outline-none"
+                name="firstName"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                required
+                placeholder="e.g. Wei"
+                className="w-full bg-transparent border-b-2 border-ink focus:border-cinnabar transition-colors py-2 text-base placeholder:text-muted focus:outline-none"
               />
             </Field>
 
+            <Field label="Last name" cn="姓" required>
+              <input
+                name="lastName"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                required
+                placeholder="e.g. Tan"
+                className="w-full bg-transparent border-b-2 border-ink focus:border-cinnabar transition-colors py-2 text-base placeholder:text-muted focus:outline-none"
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
             <Field label="Phone / WhatsApp" cn="联络" hint="Verify after signup for +1">
               <input
                 name="phone"
@@ -135,20 +166,8 @@ export function SignupClient({
                 className="w-full bg-transparent border-b-2 border-line focus:border-cinnabar transition-colors py-2 text-base placeholder:text-muted focus:outline-none"
               />
             </Field>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-            <Field label="Property of interest" cn="目标房产">
-              <input
-                name="propertyInterest"
-                value={propertyInterest}
-                onChange={(e) => setPropertyInterest(e.target.value)}
-                placeholder="Optional · area, block, or condo"
-                className="w-full bg-transparent border-b-2 border-line focus:border-cinnabar transition-colors py-2 text-base placeholder:text-muted focus:outline-none"
-              />
-            </Field>
-
-            <Field label="Buying timeline" cn="时间" hint="Unlocks +1 with a name">
+            <Field label="Buying timeline" cn="时间" hint="Unlocks +1">
               <select
                 name="timeline"
                 value={timeline}
@@ -164,6 +183,16 @@ export function SignupClient({
               </select>
             </Field>
           </div>
+
+          <Field label="Property of interest" cn="目标房产">
+            <input
+              name="propertyInterest"
+              value={propertyInterest}
+              onChange={(e) => setPropertyInterest(e.target.value)}
+              placeholder="Optional · area, block, or condo"
+              className="w-full bg-transparent border-b-2 border-line focus:border-cinnabar transition-colors py-2 text-base placeholder:text-muted focus:outline-none"
+            />
+          </Field>
 
           <div className="pt-2">
             <button

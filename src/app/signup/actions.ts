@@ -42,7 +42,18 @@ export async function signup(formData: FormData) {
     redirect(`/signup?${q.toString()}`);
   }
 
-  const name = formData.get("name")?.toString();
+  // Name is mandatory and must carry both a first and last name. The form marks
+  // the fields `required`, but enforce server-side too (the form can be bypassed).
+  const firstName = (formData.get("firstName")?.toString() ?? "").trim();
+  const lastName = (formData.get("lastName")?.toString() ?? "").trim();
+  if (!firstName || !lastName) {
+    const q = new URLSearchParams({ error: "name" });
+    if (next) q.set("next", next);
+    if (ref) q.set("ref", ref);
+    redirect(`/signup?${q.toString()}`);
+  }
+  const name = `${firstName} ${lastName}`;
+
   const phone = formData.get("phone")?.toString();
   const propertyInterest = formData.get("propertyInterest")?.toString();
   const timeline = formData.get("timeline")?.toString();
