@@ -27,9 +27,9 @@ export const maxDuration = 60;
 export default async function UploadPage({
   searchParams,
 }: {
-  searchParams: Promise<{ credits?: string; error?: string }>;
+  searchParams: Promise<{ credits?: string; error?: string; verify?: string }>;
 }) {
-  const { credits, error } = await searchParams;
+  const { credits, error, verify } = await searchParams;
   const leadId = await getLeadId();
   if (!leadId) redirect("/signup?next=/upload");
 
@@ -45,7 +45,7 @@ export default async function UploadPage({
 
   return (
     <>
-      <SiteMasthead />
+      <SiteMasthead authed />
       <UploadClient
         remaining={remaining}
         quota={quota}
@@ -60,6 +60,8 @@ export default async function UploadPage({
         revolutReady={revolutConfigured()}
         creditsBanner={credits}
         errorBanner={error}
+        emailVerified={lead.emailVerified === 1}
+        verifyBanner={verify}
         specialistEnabled={partnersEnabled()}
         specialistRequested={lead.wantsAgent === 1}
         specialistPhone={lead.phone}

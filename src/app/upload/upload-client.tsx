@@ -3,6 +3,7 @@
 import posthog from "posthog-js";
 import { useRef, useState } from "react";
 
+import { resendVerification } from "@/app/login/actions";
 import { FlyingStarsGrid } from "@/components/flying-stars-grid";
 import { LuopanCasting } from "@/components/luopan-casting";
 import { TalkToSpecialist } from "@/components/talk-to-specialist";
@@ -56,6 +57,8 @@ export function UploadClient({
   canUpgrade,
   creditsBanner,
   errorBanner,
+  emailVerified,
+  verifyBanner,
   specialistEnabled,
   specialistRequested,
   specialistPhone,
@@ -66,6 +69,8 @@ export function UploadClient({
   canUpgrade: boolean;
   creditsBanner?: string;
   errorBanner?: string;
+  emailVerified: boolean;
+  verifyBanner?: string;
   specialistEnabled: boolean;
   specialistRequested: boolean;
   specialistPhone: string | null;
@@ -162,6 +167,22 @@ export function UploadClient({
             >
               ✕
             </button>
+          </div>
+        )}
+        {!emailVerified && (
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-3 border border-cinnabar bg-cinnabar/5 px-5 py-3 text-sm">
+            <span className="text-ink-soft">
+              {verifyBanner === "sent"
+                ? "Verification link sent — check your email to finish."
+                : "Verify your email to secure your account and buy reading credits."}
+            </span>
+            {verifyBanner !== "sent" && (
+              <form action={resendVerification}>
+                <button className="font-display text-cinnabar hover:translate-x-0.5 transition-transform whitespace-nowrap">
+                  Resend link →
+                </button>
+              </form>
+            )}
           </div>
         )}
         <header className="mb-10 max-w-2xl">

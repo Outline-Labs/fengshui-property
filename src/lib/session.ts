@@ -92,6 +92,29 @@ export function readMagicToken(token: string): string | null {
   return agentId;
 }
 
+// ── Consumer passwordless login / email-verification tokens ─────────────────
+// Same stateless HMAC scheme as the agent magic token, but namespaced ("login:")
+// so an agent token can never be replayed to mint a consumer session (and vice
+// versa). 15-min TTL; clicking the emailed link both proves email ownership and
+// signs the lead in.
+const LOGIN_TTL_MS = 15 * 60 * 1000;
+
+export function createLoginToken(leadId: string): string {
+  return sign(`login:${leadId}:${Date.now() + LOGIN_TTL_MS}`);
+}
+
+export function readLoginToken(token: string): string | null {
+  const v = unsign(token);
+  if (!v || !v.startsWith("login:")) return null;
+  const rest = v.slice("login:".length);
+  const i = rest.lastIndexOf(":");
+  if (i < 0) return null;
+  const leadId = rest.slice(0, i);
+  const exp = Number(rest.slice(i + 1));
+  if (!leadId || !Number.isFinite(exp) || Date.now() > exp) return null;
+  return leadId;
+}
+
 export async function createAgentSession(agentId: string): Promise<void> {
   const c = await cookies();
   c.set(AGENT_COOKIE, sign(agentId), {

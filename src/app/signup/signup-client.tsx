@@ -76,6 +76,13 @@ export function SignupClient({
 
         <QuotaMeter quota={quota} />
 
+        <p className="text-sm text-muted mt-4">
+          Already have an account?{" "}
+          <a href="/login" className="text-cinnabar hover:underline">
+            Log in
+          </a>
+        </p>
+
         {error === "email" && (
           <div className="border border-cinnabar bg-cinnabar/10 px-5 py-3 mt-6 text-sm">
             That email looks incomplete — please check it.
