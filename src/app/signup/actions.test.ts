@@ -119,10 +119,21 @@ describe("signup — within the limit", () => {
 
   it("creates the lead, attaches the referral, starts a session, redirects to next", async () => {
     const to = await targetOf(() =>
-      signup(form({ email: "new@test.sg", next: "/upload", ref: "XYZ" })),
+      signup(
+        form({
+          email: "new@test.sg",
+          firstName: "Wei",
+          lastName: "Tan",
+          next: "/upload",
+          ref: "XYZ",
+        }),
+      ),
     );
 
     expect(upsertLead).toHaveBeenCalledTimes(1);
+    expect(upsertLead).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "new@test.sg", name: "Wei Tan" }),
+    );
     expect(attachReferral).toHaveBeenCalledWith("lead-1", "XYZ");
     expect(createSession).toHaveBeenCalledWith("lead-1");
     expect(sendMagicLink).toHaveBeenCalledWith(
@@ -132,7 +143,56 @@ describe("signup — within the limit", () => {
   });
 
   it("defaults to /upload when no next is supplied", async () => {
-    const to = await targetOf(() => signup(form({ email: "new@test.sg" })));
+    const to = await targetOf(() =>
+      signup(form({ email: "new@test.sg", firstName: "Wei", lastName: "Tan" })),
+    );
     expect(to).toBe("/upload");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Name is mandatory and must carry BOTH a first and last name. The form marks
+// the fields required, but the action enforces it server-side too.
+// ---------------------------------------------------------------------------
+describe("signup — name is mandatory (first + last)", () => {
+  it("rejects a missing name without creating a lead or session", async () => {
+    const to = await targetOf(() => signup(form({ email: "a@b.sg" })));
+    expect(to).toBe("/signup?error=name");
+    expect(upsertLead).not.toHaveBeenCalled();
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects when only the first name is supplied", async () => {
+    const to = await targetOf(() =>
+      signup(form({ email: "a@b.sg", firstName: "Wei" })),
+    );
+    expect(to).toBe("/signup?error=name");
+    expect(upsertLead).not.toHaveBeenCalled();
+  });
+
+  it("rejects a whitespace-only last name", async () => {
+    const to = await targetOf(() =>
+      signup(form({ email: "a@b.sg", firstName: "Wei", lastName: "   " })),
+    );
+    expect(to).toBe("/signup?error=name");
+    expect(upsertLead).not.toHaveBeenCalled();
+  });
+
+  it("trims and combines first + last into a single stored name", async () => {
+    await targetOf(() =>
+      signup(form({ email: "a@b.sg", firstName: " Wei ", lastName: " Tan " })),
+    );
+    expect(upsertLead).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Wei Tan" }),
+    );
+  });
+
+  it("preserves next + ref on the name-error redirect", async () => {
+    const to = await targetOf(() =>
+      signup(form({ email: "a@b.sg", next: "/upload", ref: "ABC123" })),
+    );
+    expect(to).toContain("error=name");
+    expect(to).toContain("next=%2Fupload");
+    expect(to).toContain("ref=ABC123");
   });
 });
