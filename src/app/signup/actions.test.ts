@@ -39,6 +39,11 @@ vi.mock("@/lib/session", () => ({
 
 vi.mock("@/lib/posthog-server", () => ({ getPostHogClient: () => null }));
 
+const sendMagicLink = vi.fn(async () => {});
+vi.mock("@/lib/auth-email", () => ({
+  sendMagicLink: (p: unknown) => sendMagicLink(p),
+}));
+
 const { signup } = await import("./actions");
 
 async function targetOf(run: () => Promise<unknown>): Promise<string> {
@@ -120,6 +125,9 @@ describe("signup — within the limit", () => {
     expect(upsertLead).toHaveBeenCalledTimes(1);
     expect(attachReferral).toHaveBeenCalledWith("lead-1", "XYZ");
     expect(createSession).toHaveBeenCalledWith("lead-1");
+    expect(sendMagicLink).toHaveBeenCalledWith(
+      expect.objectContaining({ leadId: "lead-1", kind: "verify" }),
+    );
     expect(to).toBe("/upload");
   });
 

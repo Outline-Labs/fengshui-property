@@ -23,6 +23,10 @@ export const leads = sqliteTable(
     phoneVerified: integer("phone_verified").notNull().default(0),
     wantsAgent: integer("wants_agent").notNull().default(0),
     verifiedAt: integer("verified_at"),
+    // Email-ownership verification via passwordless magic link. Separate from the
+    // phone verification above; gates login on a new device + credit purchases.
+    emailVerified: integer("email_verified").notNull().default(0),
+    emailVerifiedAt: integer("email_verified_at"),
     // Consumer reading credits beyond the profile-based free quota: readings
     // earned by referring friends or bought as a pack. The effective allowance
     // is computeQuota(profile) + bonusReadings; only ever bumped atomically

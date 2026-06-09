@@ -3,6 +3,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { sendMagicLink } from "@/lib/auth-email";
 import { attachReferral } from "@/lib/credits";
 import { upsertLead } from "@/lib/leads";
 import { getPostHogClient } from "@/lib/posthog-server";
@@ -21,8 +22,9 @@ export async function signup(formData: FormData) {
   // Per-IP throttle: signup is email-only (no verification), so cap submissions
   // to curb throwaway-account / lead spam. Plan-independent (works on Hobby,
   // where Vercel Firewall rate limiting isn't available).
+  const h = await headers();
   const rl = await rateLimit({
-    key: `signup:${clientIp(await headers())}`,
+    key: `signup:${clientIp(h)}`,
     limit: 10,
     windowMs: 600_000,
   });
@@ -52,6 +54,19 @@ export async function signup(formData: FormData) {
   if (ref) await attachReferral(id, ref);
 
   await createSession(id);
+
+  // Email-verification magic link (best-effort — never block signup on a
+  // transient email failure; they can resend from /upload or /login).
+  try {
+    await sendMagicLink({
+      email,
+      leadId: id,
+      hostHeader: h.get("host"),
+      kind: "verify",
+    });
+  } catch {
+    // verification can be resent later
+  }
 
   const ph = getPostHogClient();
   if (ph) {

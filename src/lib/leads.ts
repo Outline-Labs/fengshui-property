@@ -66,6 +66,25 @@ export async function getLead(id: string): Promise<Lead | null> {
   return r[0] ?? null;
 }
 
+/** Find a lead by (normalized) email — the entry point for passwordless login. */
+export async function getLeadByEmail(email: string): Promise<Lead | null> {
+  await ensureSchema();
+  const e = email.trim().toLowerCase();
+  if (!e) return null;
+  const r = await db.select().from(leads).where(eq(leads.email, e)).limit(1);
+  return r[0] ?? null;
+}
+
+/** Mark a lead's email as verified (set when they consume a magic link). */
+export async function markEmailVerified(leadId: string): Promise<void> {
+  await ensureSchema();
+  const now = Date.now();
+  await db
+    .update(leads)
+    .set({ emailVerified: 1, emailVerifiedAt: now, updatedAt: now })
+    .where(eq(leads.id, leadId));
+}
+
 export function normalizeSgMobile(raw: string): string | null {
   const digits = raw.replace(/\D/g, "").replace(/^65/, "");
   return /^[89]\d{7}$/.test(digits) ? digits : null;

@@ -1,6 +1,11 @@
 import Link from "next/link";
 
-export function SiteMasthead() {
+import { logout } from "@/app/login/actions";
+
+// `authed` is optional so static marketing pages (home/method/period-9) can keep
+// rendering statically (no cookie read) — they just show "Log in". Dynamic,
+// authenticated pages (e.g. /upload) pass `authed` to show "Log out".
+export function SiteMasthead({ authed }: { authed?: boolean }) {
   return (
     <header className="border-b border-line">
       <div className="mx-auto max-w-7xl px-6 sm:px-10 py-5 flex items-center justify-between">
@@ -25,6 +30,23 @@ export function SiteMasthead() {
           >
             Period 9
           </Link>
+          {authed ? (
+            <form action={logout}>
+              <button
+                type="submit"
+                className="hover:text-cinnabar transition-colors"
+              >
+                Log out
+              </button>
+            </form>
+          ) : (
+            <Link
+              href="/login"
+              className="hover:text-cinnabar transition-colors"
+            >
+              Log in
+            </Link>
+          )}
         </nav>
       </div>
     </header>

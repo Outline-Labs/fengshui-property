@@ -44,6 +44,10 @@ vi.mock("@/lib/revolut", () => ({
 // block is skipped, but mock it anyway so the route never reaches the network.
 vi.mock("@/lib/posthog-server", () => ({ getPostHogClient: () => null }));
 
+// buyReadingsAction gates on the lead's verified email; default to verified.
+const getLead = vi.fn(async () => ({ id: "lead-1", emailVerified: 1 }));
+vi.mock("@/lib/leads", () => ({ getLead: (id: string) => getLead(id) }));
+
 const { buyReadingsAction } = await import("./credits-actions");
 
 async function targetOf(run: () => Promise<unknown>): Promise<string> {
@@ -70,6 +74,8 @@ beforeEach(() => {
   revolutConfigured.mockReset();
   revolutConfigured.mockReturnValue(false);
   createOrder.mockReset();
+  getLead.mockReset();
+  getLead.mockResolvedValue({ id: "lead-1", emailVerified: 1 });
   delete process.env.NODE_ENV;
 });
 
@@ -82,6 +88,15 @@ describe("buyReadingsAction — gating", () => {
     getLeadId.mockResolvedValue(null);
     const to = await targetOf(() => buyReadingsAction(form({ cents: "900" })));
     expect(to).toBe("/signup?next=/upload");
+    expect(createOrder).not.toHaveBeenCalled();
+    expect(grantReadings).not.toHaveBeenCalled();
+  });
+
+  it("blocks an unverified email from buying (redirect ?error=verify_email, no charge)", async () => {
+    getLeadId.mockResolvedValue("lead-1");
+    getLead.mockResolvedValue({ id: "lead-1", emailVerified: 0 });
+    const to = await targetOf(() => buyReadingsAction(form({ cents: "900" })));
+    expect(to).toBe("/upload?error=verify_email");
     expect(createOrder).not.toHaveBeenCalled();
     expect(grantReadings).not.toHaveBeenCalled();
   });

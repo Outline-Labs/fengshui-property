@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 
 import { safeConsumerHost } from "@/lib/consumer-hosts";
 import { grantReadings } from "@/lib/credits";
+import { getLead } from "@/lib/leads";
 import { getPostHogClient } from "@/lib/posthog-server";
 import {
   createOrder,
@@ -28,6 +29,11 @@ export async function buyReadingsAction(formData: FormData) {
   const cents = Number(formData.get("cents"));
   const readings = readingsForPackCents(cents);
   if (!readings) redirect("/upload?error=badpack");
+
+  // Gate purchases on a verified email — don't take money from a typo'd or
+  // unverified address.
+  const lead = await getLead(leadId);
+  if (!lead?.emailVerified) redirect("/upload?error=verify_email");
 
   if (!revolutConfigured()) {
     // No Revolut keys. In dev, grant instantly so the flow works offline
