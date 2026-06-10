@@ -26,13 +26,18 @@ vi.mock("@/lib/credits", () => ({
 // Imported after the mocks are registered so the route binds the mocked deps.
 const { POST } = await import("./route");
 
-/** Build a POST Request with optional Revolut webhook headers and a raw body. */
+/** Build a POST Request with optional Revolut webhook headers and a raw body.
+ *  `ts` defaults to the current time as a ms-epoch string so fresh-timestamp
+ *  tests don't need to specify it explicitly. Pass an explicit value to test
+ *  stale / malformed timestamp paths. */
 function webhookRequest(
   opts: { sig?: string; ts?: string; body?: string } = {},
 ): Request {
   const headers: Record<string, string> = {};
   if (opts.sig !== undefined) headers["revolut-signature"] = opts.sig;
-  if (opts.ts !== undefined) headers["revolut-request-timestamp"] = opts.ts;
+  // Default to now so the timestamp freshness check passes unless overridden.
+  headers["revolut-request-timestamp"] =
+    opts.ts !== undefined ? opts.ts : String(Date.now());
   return new Request("https://example.com/api/revolut/webhook", {
     method: "POST",
     headers,
@@ -114,12 +119,13 @@ describe("revolut webhook — signature verification", () => {
 
   it("verifies against the RAW body, signature header, timestamp, and secret", async () => {
     const raw = orderCompletedBody();
-    await POST(webhookRequest({ sig: "v1=good", ts: "1717689600000", body: raw }));
+    const freshTs = String(Date.now());
+    await POST(webhookRequest({ sig: "v1=good", ts: freshTs, body: raw }));
     expect(verifyWebhookSignature).toHaveBeenCalledTimes(1);
     expect(verifyWebhookSignature).toHaveBeenCalledWith({
       rawBody: raw,
       signatureHeader: "v1=good",
-      timestamp: "1717689600000",
+      timestamp: freshTs,
       secret: "wsk_test",
     });
   });
@@ -137,7 +143,6 @@ describe("revolut webhook — ORDER_COMPLETED", () => {
     const res = await POST(
       webhookRequest({
         sig: "v1=good",
-        ts: "1",
         body: orderCompletedBody({ order_id: "ord_42" }),
       }),
     );
@@ -154,7 +159,7 @@ describe("revolut webhook — ORDER_COMPLETED", () => {
 
   it("uses the order id as the idempotency ref so a redelivery grants once", async () => {
     await POST(
-      webhookRequest({ sig: "v1=good", ts: "1", body: orderCompletedBody() }),
+      webhookRequest({ sig: "v1=good", body: orderCompletedBody() }),
     );
     expect(grantReadings).toHaveBeenCalledWith(
       expect.objectContaining({ ref: "ord_1" }),
@@ -168,12 +173,12 @@ describe("revolut webhook — ORDER_COMPLETED", () => {
       id: "ord_1",
       state: "completed",
       amount: 900, // 5-pack — the real charge
+      currency: "SGD",
       merchant_order_data: { reference: "lead-1" },
     });
     await POST(
       webhookRequest({
         sig: "v1=good",
-        ts: "1",
         body: orderCompletedBody({ amount: 5600, readings: 40 }),
       }),
     );
@@ -190,18 +195,17 @@ describe("revolut webhook — ORDER_COMPLETED", () => {
       merchant_order_data: { reference: "lead-1" },
     });
     const res = await POST(
-      webhookRequest({ sig: "v1=good", ts: "1", body: orderCompletedBody() }),
+      webhookRequest({ sig: "v1=good", body: orderCompletedBody() }),
     );
     expect(res.status).toBe(200);
     expect(grantReadings).not.toHaveBeenCalled();
   });
 
   it("does NOT grant when no leadId (merchant_order_data.reference) can be resolved", async () => {
-    getOrder.mockResolvedValue({ id: "ord_1", state: "completed", amount: 900 });
+    getOrder.mockResolvedValue({ id: "ord_1", state: "completed", amount: 900, currency: "SGD" });
     const res = await POST(
       webhookRequest({
         sig: "v1=good",
-        ts: "1",
         body: JSON.stringify({ event: "ORDER_COMPLETED", order_id: "ord_1" }),
       }),
     );
@@ -214,10 +218,11 @@ describe("revolut webhook — ORDER_COMPLETED", () => {
       id: "ord_1",
       state: "completed",
       amount: 1234, // off-pack
+      currency: "SGD",
       merchant_order_data: { reference: "lead-1" },
     });
     const res = await POST(
-      webhookRequest({ sig: "v1=good", ts: "1", body: orderCompletedBody() }),
+      webhookRequest({ sig: "v1=good", body: orderCompletedBody() }),
     );
     expect(res.status).toBe(200);
     expect(grantReadings).not.toHaveBeenCalled();
@@ -229,7 +234,6 @@ describe("revolut webhook — ignored events", () => {
     const res = await POST(
       webhookRequest({
         sig: "v1=good",
-        ts: "1",
         body: JSON.stringify({ event: "ORDER_AUTHORISED", order_id: "ord_1" }),
       }),
     );
@@ -240,7 +244,7 @@ describe("revolut webhook — ignored events", () => {
 
   it("400s on an unparseable body (after a valid signature)", async () => {
     const res = await POST(
-      webhookRequest({ sig: "v1=good", ts: "1", body: "not json" }),
+      webhookRequest({ sig: "v1=good", body: "not json" }),
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toBe("Invalid payload");
@@ -253,11 +257,89 @@ describe("revolut webhook — handler failures", () => {
     grantReadings.mockRejectedValue(new Error("DB hiccup"));
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await POST(
-      webhookRequest({ sig: "v1=good", ts: "1", body: orderCompletedBody() }),
+      webhookRequest({ sig: "v1=good", body: orderCompletedBody() }),
     );
     expect(res.status).toBe(500);
     expect(await res.text()).toBe("Handler error");
     expect(grantReadings).toHaveBeenCalledTimes(1);
     errSpy.mockRestore();
+  });
+});
+
+// ── FIX 1: Replay-attack protection (timestamp freshness) ───────────────────
+// Revolut-Request-Timestamp is epoch milliseconds. A captured valid request
+// replayed >5 minutes later must be rejected with 400 "Timestamp out of range".
+describe("revolut webhook — timestamp freshness (replay protection)", () => {
+  it("400s when the timestamp is more than 5 minutes in the past (stale / replayed)", async () => {
+    // 10 minutes ago — well outside the 300 000 ms window
+    const staleTs = String(Date.now() - 10 * 60 * 1000);
+    const res = await POST(
+      webhookRequest({ sig: "v1=good", ts: staleTs, body: orderCompletedBody() }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toBe("Timestamp out of range");
+    expect(grantReadings).not.toHaveBeenCalled();
+  });
+
+  it("proceeds past the timestamp check when the timestamp is fresh", async () => {
+    // Exactly now — well inside the 300 000 ms window
+    const freshTs = String(Date.now());
+    const res = await POST(
+      webhookRequest({ sig: "v1=good", ts: freshTs, body: orderCompletedBody() }),
+    );
+    // The default beforeEach has a completed SGD order so it proceeds all the
+    // way to grantReadings and returns 200.
+    expect(res.status).toBe(200);
+    expect(grantReadings).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── FIX 2: Currency guard ────────────────────────────────────────────────────
+// An order not denominated in SGD must be silently acked (200) so Revolut
+// stops retrying, but grantReadings must NOT be called — minor-unit amounts
+// in a cheaper currency happen to match our SGD pack prices by coincidence.
+describe("revolut webhook — currency guard", () => {
+  it("does NOT grant when a completed order is denominated in USD (acks 200 so Revolut stops retrying)", async () => {
+    getOrder.mockResolvedValue({
+      id: "ord_usd_1",
+      state: "completed",
+      amount: 900, // happens to equal the SGD 5-pack in minor units
+      currency: "USD",
+      merchant_order_data: { reference: "lead-1" },
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await POST(
+      webhookRequest({
+        sig: "v1=good",
+        body: orderCompletedBody({ order_id: "ord_usd_1" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(grantReadings).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("unexpected currency USD"),
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("still grants when a completed order is correctly denominated in SGD", async () => {
+    getOrder.mockResolvedValue({
+      id: "ord_sgd_1",
+      state: "completed",
+      amount: 900, // 5-pack in SGD
+      currency: "SGD",
+      merchant_order_data: { reference: "lead-1" },
+    });
+    const res = await POST(
+      webhookRequest({
+        sig: "v1=good",
+        body: orderCompletedBody({ order_id: "ord_sgd_1" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(grantReadings).toHaveBeenCalledTimes(1);
+    expect(grantReadings).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 5, ref: "ord_sgd_1" }),
+    );
   });
 });

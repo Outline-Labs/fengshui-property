@@ -175,6 +175,15 @@ export function ensureSchema(): Promise<void> {
           PRIMARY KEY (key, window_start)
         )
       `);
+      // Single-use guard for magic links: sha256 of a consumed login/verify
+      // token. The verify routes insert the hash on consume; a replay collides
+      // on the PK and is rejected. See lib/used-tokens.ts.
+      await client.execute(`
+        CREATE TABLE IF NOT EXISTS used_tokens (
+          token_hash TEXT PRIMARY KEY,
+          used_at INTEGER NOT NULL
+        )
+      `);
     })();
   }
   return ready;

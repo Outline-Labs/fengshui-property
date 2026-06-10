@@ -43,6 +43,7 @@ export default async function SignupPage({
               phone: lead.phone,
               propertyInterest: lead.propertyInterest,
               timeline: lead.timeline,
+              phoneVerified: lead.phoneVerified === 1,
             }}
           />
         </>

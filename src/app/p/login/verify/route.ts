@@ -3,11 +3,13 @@ import { redirect } from "next/navigation";
 import { getAgent } from "@/lib/agents";
 import { getPostHogClient } from "@/lib/posthog-server";
 import { createAgentSession, readMagicToken } from "@/lib/session";
+import { consumeToken } from "@/lib/used-tokens";
 
 export async function GET(req: Request) {
   const token = new URL(req.url).searchParams.get("token") ?? "";
   const agentId = readMagicToken(token);
-  if (agentId) {
+  // Single-use: consume before acting, so a replayed link can't re-mint a session.
+  if (agentId && (await consumeToken(token))) {
     const agent = await getAgent(agentId);
     if (agent && agent.status === "approved") {
       await createAgentSession(agentId);

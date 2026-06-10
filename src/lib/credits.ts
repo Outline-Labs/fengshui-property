@@ -187,12 +187,15 @@ export async function applyReferralActivation(
   const referee = await loadLead(refereeLeadId);
   if (!referee || referee.referralActivated) return;
 
-  // Mark first so concurrent/later reads short-circuit; the grant's UNIQUE(ref)
-  // is the real double-reward guard.
-  await db
+  // Flip the activation flag ATOMICALLY (... AND referral_activated = 0): if a
+  // concurrent first-reading already won the race, rowsAffected is 0 and we stop,
+  // so the referrer is rewarded exactly once. (grantReadings' UNIQUE(ref) is the
+  // financial backstop; this makes the flag itself the guard.)
+  const flip = await db
     .update(leads)
     .set({ referralActivated: 1, updatedAt: Date.now() })
-    .where(eq(leads.id, referee.id));
+    .where(and(eq(leads.id, referee.id), eq(leads.referralActivated, 0)));
+  if (flip.rowsAffected !== 1) return;
 
   if (!referee.referredBy) return;
   const referrerRows = await db

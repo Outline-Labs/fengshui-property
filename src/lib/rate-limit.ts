@@ -13,16 +13,19 @@ export type RateLimitResult = { ok: boolean; count: number; limit: number };
  * bumps the counter for the current window, then reports whether this request is
  * within `limit`.
  *
- * Fails OPEN on a DB error: the limiter must never take the site down on its own,
- * and the global MAX_DAILY_READINGS cap is the real cost backstop for the paid
- * path. The post-increment read can momentarily over-count under concurrency,
- * which only ever makes the limit slightly stricter at the boundary — safe.
+ * Fails OPEN by default on a DB error: the limiter must never take the site down
+ * on its own, and the global MAX_DAILY_READINGS cap is the real cost backstop for
+ * the paid path. Cost-sensitive callers (OTP / paid SMS) pass `failClosed` to
+ * REJECT instead when the counter can't be read, so a DB blip can't lift the
+ * throttle mid-attack. The post-increment read can momentarily over-count under
+ * concurrency, which only ever makes the limit slightly stricter — safe.
  */
 export async function rateLimit(p: {
   key: string;
   limit: number;
   windowMs: number;
   now?: number;
+  failClosed?: boolean;
 }): Promise<RateLimitResult> {
   await ensureSchema();
   const now = p.now ?? Date.now();
@@ -43,7 +46,8 @@ export async function rateLimit(p: {
     const count = rows[0]?.c ?? 1;
     return { ok: count <= p.limit, count, limit: p.limit };
   } catch {
-    return { ok: true, count: 0, limit: p.limit };
+    // Fail open (allow) by default; fail closed (reject) for cost-sensitive callers.
+    return { ok: !p.failClosed, count: 0, limit: p.limit };
   }
 }
 

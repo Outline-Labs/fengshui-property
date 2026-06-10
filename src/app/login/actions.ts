@@ -56,9 +56,20 @@ export async function consumerLogin(formData: FormData) {
 export async function resendVerification() {
   const leadId = await getLeadId();
   if (!leadId) redirect("/signup?next=/upload");
+  const h = await headers();
+  // Throttle so a signed-in lead can't spam Resend (each click is an email).
+  const byLead = await rateLimit({
+    key: `resend:${leadId}`,
+    limit: 5,
+    windowMs: 3_600_000,
+  });
+  const byIp = await rateLimit({
+    key: `resend-ip:${clientIp(h)}`,
+    limit: 10,
+    windowMs: 3_600_000,
+  });
   const lead = await getLead(leadId);
-  if (lead && !lead.emailVerified) {
-    const h = await headers();
+  if (byLead.ok && byIp.ok && lead && !lead.emailVerified) {
     await sendMagicLink({
       email: lead.email,
       leadId,
@@ -66,6 +77,7 @@ export async function resendVerification() {
       kind: "verify",
     });
   }
+  // Always report "sent" — the throttle is silent, never blocks the UI.
   redirect("/upload?verify=sent");
 }
 

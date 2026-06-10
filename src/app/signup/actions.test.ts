@@ -25,7 +25,13 @@ vi.mock("@/lib/rate-limit", () => ({
 }));
 
 const upsertLead = vi.fn(async () => "lead-1");
-vi.mock("@/lib/leads", () => ({ upsertLead: (...a: unknown[]) => upsertLead(...a) }));
+const getLeadByEmail = vi.fn(
+  async (): Promise<{ id: string; emailVerified: number } | null> => null,
+);
+vi.mock("@/lib/leads", () => ({
+  upsertLead: (...a: unknown[]) => upsertLead(...a),
+  getLeadByEmail: (...a: unknown[]) => getLeadByEmail(...a),
+}));
 
 const attachReferral = vi.fn(async () => {});
 vi.mock("@/lib/credits", () => ({
@@ -33,8 +39,10 @@ vi.mock("@/lib/credits", () => ({
 }));
 
 const createSession = vi.fn(async () => {});
+const getLeadId = vi.fn(async (): Promise<string | null> => null);
 vi.mock("@/lib/session", () => ({
   createSession: (...a: unknown[]) => createSession(...a),
+  getLeadId: (...a: unknown[]) => getLeadId(...a),
 }));
 
 vi.mock("@/lib/posthog-server", () => ({ getPostHogClient: () => null }));
@@ -66,6 +74,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   rateLimit.mockResolvedValue({ ok: true, count: 1, limit: 10 });
   upsertLead.mockResolvedValue("lead-1");
+  getLeadByEmail.mockResolvedValue(null); // default: brand-new email
+  getLeadId.mockResolvedValue(null); // default: unauthenticated
 });
 
 afterEach(() => {
@@ -194,5 +204,81 @@ describe("signup — name is mandatory (first + last)", () => {
     expect(to).toContain("error=name");
     expect(to).toContain("next=%2Fupload");
     expect(to).toContain("ref=ABC123");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Account-takeover guard: signing up with an email that already has an account
+// must NOT mint a session or mutate the lead — only the authenticated owner
+// (the returning profile-edit flow) may proceed.
+// ---------------------------------------------------------------------------
+describe("signup — existing email (no takeover)", () => {
+  it("emails a login link, no session/upsert, for an UNauthenticated existing email", async () => {
+    getLeadByEmail.mockResolvedValue({ id: "victim-1", emailVerified: 1 });
+    getLeadId.mockResolvedValue(null); // attacker has no session
+
+    const to = await targetOf(() =>
+      signup(form({ email: "victim@test.sg", firstName: "Mal", lastName: "Ory" })),
+    );
+
+    expect(to).toBe("/login?sent=1");
+    expect(sendMagicLink).toHaveBeenCalledWith(
+      expect.objectContaining({ leadId: "victim-1", kind: "login" }),
+    );
+    expect(upsertLead).not.toHaveBeenCalled(); // never touch the victim's data
+    expect(createSession).not.toHaveBeenCalled(); // never impersonate them
+  });
+
+  it("does NOT treat a DIFFERENT signed-in lead as the owner", async () => {
+    getLeadByEmail.mockResolvedValue({ id: "victim-1", emailVerified: 1 });
+    getLeadId.mockResolvedValue("attacker-2"); // a session for someone else
+
+    const to = await targetOf(() =>
+      signup(form({ email: "victim@test.sg", firstName: "Mal", lastName: "Ory" })),
+    );
+
+    expect(to).toBe("/login?sent=1");
+    expect(upsertLead).not.toHaveBeenCalled();
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
+  it("lets the OWNER (session matches the lead) edit their own profile", async () => {
+    getLeadByEmail.mockResolvedValue({ id: "owner-1", emailVerified: 1 });
+    getLeadId.mockResolvedValue("owner-1"); // the owner is signed in
+    upsertLead.mockResolvedValue("owner-1");
+
+    const to = await targetOf(() =>
+      signup(
+        form({
+          email: "owner@test.sg",
+          firstName: "Wei",
+          lastName: "Tan",
+          next: "/upload",
+        }),
+      ),
+    );
+
+    expect(upsertLead).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "owner@test.sg", name: "Wei Tan" }),
+    );
+    expect(createSession).toHaveBeenCalledWith("owner-1");
+    // already verified → don't re-send the verification email on a profile edit
+    expect(sendMagicLink).not.toHaveBeenCalled();
+    expect(to).toBe("/upload");
+  });
+
+  it("lets the owner save with only a first name (legacy single-token name)", async () => {
+    getLeadByEmail.mockResolvedValue({ id: "owner-2", emailVerified: 0 });
+    getLeadId.mockResolvedValue("owner-2");
+    upsertLead.mockResolvedValue("owner-2");
+
+    const to = await targetOf(() =>
+      signup(form({ email: "legacy@test.sg", firstName: "Wei" })), // no last name
+    );
+
+    expect(upsertLead).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "Wei" }),
+    );
+    expect(to).toBe("/upload");
   });
 });

@@ -22,7 +22,9 @@ vi.mock("@/lib/posthog-server", () => ({ getPostHogClient: () => null }));
 const SECRET = "wsk_integration_secret";
 const { POST } = await import("./route");
 
-function signedRequest(rawBody: string, ts = "1717689600000"): Request {
+// Default to a FRESH timestamp so the route's replay-window check passes; tests
+// that probe staleness pass an explicit old ts.
+function signedRequest(rawBody: string, ts = String(Date.now())): Request {
   const sig =
     "v1=" +
     crypto
@@ -83,6 +85,7 @@ describe("revolut webhook — real money movement", () => {
       id: "ord_real_2",
       state: "completed",
       amount: 900, // 5-pack
+      currency: "SGD",
       merchant_order_data: { reference: leadId },
     });
     const body = JSON.stringify({
@@ -145,6 +148,7 @@ describe("revolut webhook — real money movement", () => {
       id: "ord_offpack",
       state: "completed",
       amount: 1234, // not a real pack price
+      currency: "SGD",
       merchant_order_data: { reference: leadId },
     });
     const res = await POST(

@@ -10,6 +10,7 @@ import {
   floorPlanReadingsSince,
   getCredits,
   getLead,
+  normalizeSgMobile,
   releaseReading,
   requestOtp,
   reserveReading,
@@ -33,10 +34,37 @@ import type {
   UnitEngineSummary,
 } from "@/lib/types";
 
-export async function requestSpecialistOtp(phone: string): Promise<OtpResult> {
+// Every OTP is a paid SMS and the phone is fully caller-controlled, so throttle
+// hard — per lead, per IP, per destination number, and a global daily ceiling —
+// to stop SMS pumping / toll fraud. Fails closed via rateLimit's counters.
+async function throttledRequestOtp(phone: string): Promise<OtpResult> {
   const leadId = await getLeadId();
   if (!leadId) return { ok: false, error: "Please sign up first." };
+  const h = await headers();
+  const ip = clientIp(h);
+  const num = normalizeSgMobile(phone) ?? "invalid";
+  const checks = await Promise.all([
+    rateLimit({ key: `otp-lead:${leadId}`, limit: 5, windowMs: 3_600_000, failClosed: true }),
+    rateLimit({ key: `otp-ip:${ip}`, limit: 8, windowMs: 3_600_000, failClosed: true }),
+    rateLimit({ key: `otp-num:${num}`, limit: 5, windowMs: 86_400_000, failClosed: true }),
+    rateLimit({
+      key: "otp-global",
+      limit: Number(process.env.MAX_DAILY_OTP) || 500,
+      windowMs: 86_400_000,
+      failClosed: true,
+    }),
+  ]);
+  if (checks.some((c) => !c.ok)) {
+    return {
+      ok: false,
+      error: "Too many code requests just now — please wait a bit and try again.",
+    };
+  }
   return requestOtp(leadId, phone);
+}
+
+export async function requestSpecialistOtp(phone: string): Promise<OtpResult> {
+  return throttledRequestOtp(phone);
 }
 
 export async function confirmSpecialist(
@@ -50,9 +78,7 @@ export async function confirmSpecialist(
 // Consumer phone verification (no agent involved) — verifying unlocks the +1
 // profile quota bonus. Mirrors the specialist OTP but never sets wantsAgent.
 export async function requestPhoneOtp(phone: string): Promise<OtpResult> {
-  const leadId = await getLeadId();
-  if (!leadId) return { ok: false, error: "Please sign up first." };
-  return requestOtp(leadId, phone);
+  return throttledRequestOtp(phone);
 }
 
 export async function confirmPhoneOtp(

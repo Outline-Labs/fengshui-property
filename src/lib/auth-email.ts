@@ -27,7 +27,7 @@ export async function sendMagicLink(p: {
       : "Your Fengshui AI sign-in link";
   const intro =
     p.kind === "verify"
-      ? "Confirm your email to secure your Fengshui AI account and enable sign-in on any device:"
+      ? "Confirm your email to unlock your free fengshui readings and secure your account:"
       : "Sign in to Fengshui AI:";
   await sendEmail(
     p.email,
