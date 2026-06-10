@@ -13,6 +13,7 @@ type Initial = {
   phone?: string | null;
   propertyInterest?: string | null;
   timeline?: string | null;
+  phoneVerified?: boolean | null;
 };
 
 const TIMELINES = [
@@ -51,10 +52,14 @@ export function SignupClient({
   );
   const [timeline, setTimeline] = useState(initial?.timeline ?? "");
 
-  // First + last name are mandatory; the phone +1 is earned after signup via
-  // OTP on /upload, so the preview reflects only the base + the intent tier
-  // (a buying timeline AND a property of interest, together).
-  const quota = computeQuota({ timeline, propertyInterest });
+  // Preview = base + verified-phone (a returning lead may already have it) +
+  // the intent tier (timeline AND property of interest, together). A new signup
+  // has no verified phone yet (that +1 is earned via OTP on /upload).
+  const quota = computeQuota({
+    phoneVerified: initial?.phoneVerified ?? undefined,
+    timeline,
+    propertyInterest,
+  });
 
   return (
     <main className="flex-1 px-6 sm:px-10 py-12 sm:py-16">
@@ -143,12 +148,14 @@ export function SignupClient({
               />
             </Field>
 
-            <Field label="Last name" cn="姓" required>
+            {/* Last name is required for a new signup, but optional for a
+                returning owner so legacy single-token names can still save. */}
+            <Field label="Last name" cn="姓" required={!returning}>
               <input
                 name="lastName"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
-                required
+                required={!returning}
                 placeholder="e.g. Tan"
                 className="w-full bg-transparent border-b-2 border-ink focus:border-cinnabar transition-colors py-2 text-base placeholder:text-muted focus:outline-none"
               />

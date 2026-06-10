@@ -34,12 +34,12 @@ export const metadata: Metadata = {
     template: "%s | Fengshui AI",
   },
   description:
-    "Free AI fengshui analysis of any Singapore property. Map-based location analysis instantly, detailed unit-level analysis after signup.",
+    "Free AI fengshui analysis of any Singapore property. Map-based location analysis instantly, detailed unit-level analysis after a free, verified account.",
   alternates: { canonical: "/" },
   openGraph: {
     title: "Fengshui AI",
     description:
-      "Free AI fengshui analysis of any Singapore property. Map-based location analysis instantly, detailed unit-level analysis after signup.",
+      "Free AI fengshui analysis of any Singapore property. Map-based location analysis instantly, detailed unit-level analysis after a free, verified account.",
     url: "https://www.fengshuiai.sg",
     siteName: "Fengshui AI",
     locale: "en_SG",

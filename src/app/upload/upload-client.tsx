@@ -814,6 +814,12 @@ function bannerMessage(
       text: "Payment received — your readings will appear in a moment.",
     };
   }
+  if (error === "verify_email") {
+    return {
+      tone: "bad",
+      text: "Please verify your email first — check your inbox for the link.",
+    };
+  }
   if (error === "billing_unavailable") {
     return {
       tone: "bad",

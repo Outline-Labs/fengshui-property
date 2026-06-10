@@ -71,7 +71,7 @@ function Hero() {
               <span className="text-jade">●</span> No signup.{" "}
               <span className="mx-1">·</span> Instant reading.{" "}
               <span className="mx-1">·</span> Detailed unit-level analysis after
-              free signup.
+              a free, verified account.
             </p>
           </div>
 
@@ -181,8 +181,8 @@ function HowItWorks() {
       number: "03",
       title: "Go to unit level",
       titleCn: "深入飞星",
-      body: "Sign up to upload your floor plan for flying stars and eight mansions analysis on your specific unit.",
-      meta: "Free · Sign-in required",
+      body: "Sign up and verify your email to upload your floor plan for flying stars and eight mansions analysis on your specific unit.",
+      meta: "Free · Verify your email to unlock",
     },
   ];
 

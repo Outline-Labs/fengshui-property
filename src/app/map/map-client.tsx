@@ -724,8 +724,8 @@ function EmailGate({
         gathering and scattering, with their classical references.
       </p>
       <p className="text-sm text-ink-soft mb-6">
-        Drop your email. You&rsquo;ll see the full reading instantly, and
-        unlock unit-level analysis (also free).
+        Drop your email — you&rsquo;ll see the full reading instantly. We&rsquo;ll
+        also send a link to verify your email and unlock free unit-level analysis.
       </p>
       <form onSubmit={handle} className="flex border-b-2 border-ink">
         <input
@@ -765,8 +765,9 @@ function NextSteps() {
         <em className="text-cinnabar italic font-normal">your unit.</em>
       </p>
       <p className="text-sm text-ink-soft mb-5">
-        Location is only half the reading. Upload your floor plan for flying
-        stars and eight mansions analysis specific to your home — also free.
+        Location is only half the reading. Verify your email, then upload your
+        floor plan for flying stars and eight mansions analysis specific to your
+        home — free.
       </p>
       <a
         href="/upload"

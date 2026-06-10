@@ -150,6 +150,17 @@ export const rateLimits = sqliteTable(
   (t) => [primaryKey({ columns: [t.key, t.windowStart] })],
 );
 
+// Single-use guard for passwordless magic links: the sha256 of a consumed
+// login/verify token. readLoginToken validates signature + TTL, but the token is
+// otherwise stateless and replayable for its whole 15-min life. Consuming a
+// token inserts its hash here, so a replay of the same emailed link (forwarded,
+// logged, mail-scanner-prefetched) collides on the PK and is rejected. Rows are
+// only meaningful for the token TTL. See lib/used-tokens.ts.
+export const usedTokens = sqliteTable("used_tokens", {
+  tokenHash: text("token_hash").primaryKey(),
+  usedAt: integer("used_at").notNull(),
+});
+
 export type Lead = typeof leads.$inferSelect;
 export type Agent = typeof agents.$inferSelect;
 export type Claim = typeof claims.$inferSelect;

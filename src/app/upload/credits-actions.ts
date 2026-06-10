@@ -36,10 +36,11 @@ export async function buyReadingsAction(formData: FormData) {
   if (!lead?.emailVerified) redirect("/upload?error=verify_email");
 
   if (!revolutConfigured()) {
-    // No Revolut keys. In dev, grant instantly so the flow works offline
-    // (mirrors the OTP "000000" dev path). In prod, fail closed — never
-    // fabricate credit.
-    if (process.env.NODE_ENV !== "production") {
+    // No Revolut keys. In local dev only, grant instantly so the flow works
+    // offline (mirrors the OTP "000000" dev path). In any deployed environment
+    // (NODE_ENV=production OR running on Vercel) fail closed — never fabricate
+    // credit, even if NODE_ENV is mis-set.
+    if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
       await grantReadings({
         leadId,
         amount: readings,

@@ -106,17 +106,26 @@ function verifyAuthHeader(sid: string, token: string): string {
   return `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`;
 }
 
+// The fixed-dev-code OTP fallback (and any other offline bypass) must NEVER be
+// reachable from a deployed environment. Gate on NODE_ENV AND the absence of
+// VERCEL (set on every Vercel deploy), so even a deploy with a mis-set NODE_ENV
+// can't open the bypass.
+function devFallbackAllowed(): boolean {
+  return process.env.NODE_ENV !== "production" && !process.env.VERCEL;
+}
+
 /**
  * Start an SMS verification. Without Twilio creds we fall back to a fixed dev
- * code ("000000") so local/test flows work offline — but NEVER in production,
- * where a missing config must fail closed rather than accept a bypass code.
+ * code ("000000") so local/test flows work offline — but NEVER in a deployed
+ * environment, where a missing config must fail closed rather than accept a
+ * bypass code.
  */
 async function startVerification(
   phone: string,
 ): Promise<{ ok: boolean; devCode?: string }> {
   const cfg = verifyConfig();
   if (!cfg) {
-    if (process.env.NODE_ENV === "production") return { ok: false };
+    if (!devFallbackAllowed()) return { ok: false };
     console.log(`[OTP dev] +65 ${phone}: use code 000000`);
     return { ok: true, devCode: "000000" };
   }
@@ -139,7 +148,7 @@ async function startVerification(
 async function checkVerification(phone: string, code: string): Promise<boolean> {
   const cfg = verifyConfig();
   if (!cfg) {
-    return process.env.NODE_ENV !== "production" && code.trim() === "000000";
+    return devFallbackAllowed() && code.trim() === "000000";
   }
   try {
     const res = await fetch(
@@ -263,12 +272,15 @@ export async function reserveReading(
   const res = await db.run(sql`
     INSERT INTO analyses (id, lead_id, kind, facing, score, created_at)
     SELECT ${id}, ${leadId}, ${kind}, NULL, NULL, ${now}
-    WHERE (SELECT COUNT(*) FROM analyses WHERE lead_id = ${leadId}) < ${quota}
+    WHERE (SELECT COUNT(*) FROM analyses WHERE lead_id = ${leadId} AND kind = ${kind}) < ${quota}
   `);
   if (res.rowsAffected !== 1) return { ok: false, reason: "out_of_credits" };
 
   const used = (
-    await db.select({ id: analyses.id }).from(analyses).where(eq(analyses.leadId, leadId))
+    await db
+      .select({ id: analyses.id })
+      .from(analyses)
+      .where(and(eq(analyses.leadId, leadId), eq(analyses.kind, kind)))
   ).length;
   return { ok: true, id, remaining: Math.max(0, quota - used) };
 }
@@ -325,7 +337,7 @@ export async function getCredits(leadId: string): Promise<Credits> {
   const rows = await db
     .select({ id: analyses.id })
     .from(analyses)
-    .where(eq(analyses.leadId, leadId));
+    .where(and(eq(analyses.leadId, leadId), eq(analyses.kind, "floor_plan")));
   const used = rows.length;
   const quota = verified ? freeQuota + bonusReadings : 0;
   return {

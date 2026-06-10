@@ -81,11 +81,11 @@ export default function PrivacyPage() {
       <LegalSection n="4" title="Who we share it with">
         <p>We do not sell your personal data. We may share it with:</p>
         <p>
-          <strong>Service providers and partners</strong> — organisations that
-          process data on our behalf or help us operate, secure, improve, market,
-          and provide the service, such as hosting, payment processing,
-          analytics, communications, and AI processing. They may use your data
-          only for those purposes.
+          <strong>Service providers</strong> — organisations that process data
+          on our behalf or help us operate, secure, improve, market, and provide
+          the service, such as hosting, payment processing, analytics,
+          communications, and AI processing. They may use your data only for
+          those purposes.
         </p>
         <p>
           <strong>At your request or with your consent</strong> — third parties

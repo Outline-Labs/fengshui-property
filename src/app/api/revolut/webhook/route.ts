@@ -39,6 +39,15 @@ export async function POST(request: Request) {
     return new Response("Invalid signature", { status: 400 });
   }
 
+  // Replay-attack protection: Revolut-Request-Timestamp is epoch milliseconds
+  // (the same unit as Date.now()). Reject the request if the timestamp is
+  // absent, not a number, or more than 5 minutes old/ahead — a captured valid
+  // request can't be replayed after that window.
+  const tsNum = ts !== null ? Number(ts) : NaN;
+  if (!ts || Number.isNaN(tsNum) || Math.abs(Date.now() - tsNum) > 300_000) {
+    return new Response("Timestamp out of range", { status: 400 });
+  }
+
   let event: { event?: string; order_id?: string };
   try {
     event = JSON.parse(raw);
@@ -54,6 +63,16 @@ export async function POST(request: Request) {
       // tampered request can't mint credits.
       const order = await getOrder(event.order_id);
       if (order.state === "completed") {
+        // Currency guard: the pack prices are SGD minor units; an order in a
+        // cheaper currency whose minor-unit amount happens to match (900, 2400,
+        // 5600) would silently grant a full pack. Acknowledge (200) so Revolut
+        // stops retrying — this is not a transient error.
+        if (String(order.currency ?? "").toUpperCase() !== "SGD") {
+          console.warn(
+            `[revolut webhook] unexpected currency ${order.currency} on order ${order.id} — skipping grant`,
+          );
+          return new Response(null, { status: 200 });
+        }
         const leadId = order.merchant_order_data?.reference;
         const readings = readingsForPackCents(Number(order.amount ?? 0));
         if (leadId && readings) {
