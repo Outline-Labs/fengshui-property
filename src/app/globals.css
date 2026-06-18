@@ -102,3 +102,15 @@
   animation: compass-rotate 14s linear infinite;
   transform-origin: center;
 }
+
+/* MapLibre's stylesheet sets `.maplibregl-map { position: relative }`, which
+   overrides the `absolute inset-0` on our map container and collapses it to
+   height: 0 inside a min-height (flex) parent — so the map renders BLANK on
+   mobile (the inner `h-full` can't resolve against a min-height parent; desktop
+   only works via flex-row stretch). The doubled class out-specifies MapLibre's
+   rule without !important and restores the intended fill of the positioned
+   parent (our map column is `relative`). */
+.maplibregl-map.maplibregl-map {
+  position: absolute;
+  inset: 0;
+}

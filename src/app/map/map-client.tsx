@@ -108,10 +108,11 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
   }, []);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const el = containerRef.current;
+    if (!el) return;
 
     const map = new maplibregl.Map({
-      container: containerRef.current,
+      container: el,
       style: BASEMAP_STYLE,
       center: SG_CENTER,
       zoom: 11,
@@ -136,6 +137,14 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
 
     mapRef.current = map;
 
+    // Keep the canvas matched to the container. Flex/`svh` sizing settles after
+    // mount and shifts on orientation / the mobile URL-bar, and MapLibre does not
+    // observe its container — so without this the canvas can be left mis-sized
+    // (blank / clipped), exactly the mobile bug. ResizeObserver fires once on
+    // observe, giving an immediate correct sizing too.
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(el);
+
     // Arrived via the homepage search box (/map?q=…) — resolve and fly there.
     if (initialQuery.trim()) {
       void (async () => {
@@ -149,6 +158,7 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
     }
 
     return () => {
+      ro.disconnect();
       map.remove();
       mapRef.current = null;
     };
@@ -201,7 +211,7 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
 
   return (
     <div className="flex-1 flex flex-col lg:flex-row min-h-0">
-      <div className="relative flex-1 min-h-[55vh] lg:min-h-0 bg-bg-warm">
+      <div className="relative flex-1 min-h-[60svh] lg:min-h-0 bg-bg-warm">
         <div ref={containerRef} className="absolute inset-0 h-full w-full" />
         <SearchBox
           query={query}
