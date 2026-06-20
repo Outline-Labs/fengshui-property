@@ -23,23 +23,29 @@ export async function searchAddresses(
   return searchAddress(query, 6);
 }
 
+// The reading itself is pure local computation (POI proximity) — no network — so
+// it returns fast and can never fail or stall on a slow/rate-limited external
+// call. The address LABEL comes from OneMap, which is slow from a US function
+// region and rate-limits under load; it's fetched separately (getAddress) so its
+// latency/failures can't surface as a failed reading ("Load failed").
 export async function analyzeProperty(
   coords: Coords,
 ): Promise<FormSchoolAnalysis> {
-  const base = analyzeFormSchool(coords);
+  return analyzeFormSchool(coords);
+}
+
+/** Best-effort address label for a reading. Null on any OneMap miss/failure. */
+export async function getAddress(
+  coords: Coords,
+): Promise<NonNullable<FormSchoolAnalysis["address"]> | null> {
   const rev = await reverseGeocode(coords);
-
-  if (!rev) return base;
-
+  if (!rev) return null;
   return {
-    ...base,
-    address: {
-      formatted: formatRevGeocodeAddress(rev),
-      block: rev.block || undefined,
-      road: rev.road || undefined,
-      buildingName: rev.buildingName || undefined,
-      postalCode: rev.postalCode || undefined,
-    },
+    formatted: formatRevGeocodeAddress(rev),
+    block: rev.block || undefined,
+    road: rev.road || undefined,
+    buildingName: rev.buildingName || undefined,
+    postalCode: rev.postalCode || undefined,
   };
 }
 
