@@ -12,7 +12,7 @@ import type {
   OneMapSearchResult,
 } from "@/lib/types";
 
-import { analyzeProperty, searchAddresses, submitLead } from "./actions";
+import { analyzeProperty, getAddress, searchAddresses, submitLead } from "./actions";
 
 const SG_CENTER: [number, number] = [103.8198, 1.3521];
 const SG_BOUNDS: [[number, number], [number, number]] = [
@@ -57,6 +57,10 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
   // True only while the user is actively typing — suppresses the dropdown
   // re-opening when we set the query programmatically after a selection.
   const typingRef = useRef(false);
+  // Monotonic id per selection — lets a late async result (the address) bail out
+  // if the user has already clicked a different spot, so a stale address can't
+  // attach to the wrong reading.
+  const selectionIdRef = useRef(0);
 
   const [coords, setCoords] = useState<Coords | null>(null);
   const [analysis, setAnalysis] = useState<FormSchoolAnalysis | null>(null);
@@ -83,12 +87,23 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
         map.flyTo({ center: [next.lon, next.lat], zoom: 16, duration: 1100 });
       }
     }
+    const selectionId = ++selectionIdRef.current;
     setCoords(next);
     setStatus("loading");
     setError(null);
     setAnalysis(null);
     try {
-      const result = await analyzeProperty(next);
+      // The reading is a fast, pure server compute (no OneMap). Retry once on a
+      // transient RPC drop — a flaky mobile connection is the usual cause, not a
+      // real error — before surfacing a failure.
+      let result: FormSchoolAnalysis;
+      try {
+        result = await analyzeProperty(next);
+      } catch {
+        await new Promise((r) => setTimeout(r, 400));
+        result = await analyzeProperty(next);
+      }
+      if (selectionId !== selectionIdRef.current) return; // superseded
       setAnalysis(result);
       setStatus(
         localStorage.getItem("fengshui:unlocked") === "1" ? "full" : "brief",
@@ -97,10 +112,19 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
         lat: next.lat,
         lon: next.lon,
         score: result.score,
-        address: result.address?.formatted,
         unlocked: localStorage.getItem("fengshui:unlocked") === "1",
       });
+      // Address is a best-effort label — OneMap is slow / rate-limits, so it
+      // loads separately and its failure never affects the reading.
+      void getAddress(next)
+        .then((addr) => {
+          if (addr && selectionId === selectionIdRef.current) {
+            setAnalysis((a) => (a ? { ...a, address: addr } : a));
+          }
+        })
+        .catch(() => {});
     } catch (err) {
+      if (selectionId !== selectionIdRef.current) return; // superseded
       setStatus("error");
       setError("The reading couldn't be drawn just now. Try another spot.");
       posthog.captureException(err);
@@ -148,7 +172,12 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
     // Arrived via the homepage search box (/map?q=…) — resolve and fly there.
     if (initialQuery.trim()) {
       void (async () => {
-        const r = await searchAddresses(initialQuery);
+        let r: OneMapSearchResult[] = [];
+        try {
+          r = await searchAddresses(initialQuery);
+        } catch {
+          // search failed — leave the map at the default view
+        }
         if (r[0]) {
           typingRef.current = false;
           setQuery(r[0].label);
@@ -172,7 +201,12 @@ export function MapClient({ initialQuery = "" }: { initialQuery?: string }) {
     let active = true;
     const t = setTimeout(async () => {
       setSearching(true);
-      const r = await searchAddresses(q);
+      let r: OneMapSearchResult[] = [];
+      try {
+        r = await searchAddresses(q);
+      } catch {
+        // transient — show no results rather than throwing
+      }
       if (active) {
         setResults(r);
         setSearching(false);

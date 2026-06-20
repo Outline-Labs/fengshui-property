@@ -42,6 +42,9 @@ async function fetchToken(): Promise<string | null> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
       cache: "no-store",
+      // OneMap can hang; bound it so a stalled token fetch can't stall the whole
+      // server action (the catch below falls back to the static token / null).
+      signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) return null;
     const data = (await res.json()) as {
@@ -106,6 +109,7 @@ export async function reverseGeocode(
     res = await fetch(url, {
       headers: { Authorization: token },
       next: { revalidate: 86400 },
+      signal: AbortSignal.timeout(6000), // fail fast on a hung OneMap call
     });
   } catch {
     return null;
@@ -193,6 +197,7 @@ export async function searchAddress(
     res = await fetch(url, {
       headers: token ? { Authorization: token } : undefined,
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(5000), // fail fast on a hung OneMap call
     });
   } catch {
     return [];
