@@ -100,6 +100,147 @@ function severityFromLevel(level: number): 1 | 2 | 3 {
   return 1;
 }
 
+// ---------------------------------------------------------------------------
+// 青龙白虎 (form-school flanks) — interior 龙动虎静.
+// Standing at the centre looking out the front (the facing), a sector to the
+// LEFT of that axis is 青龙 (dragon, yang, should be active); to the RIGHT is
+// 白虎 (tiger, yin, should stay quiet). Mirrors spatial.flankOf in compass space
+// (the floor-plan engine works from sectors, not x/y geometry). This is the
+// FORM-school 青龙白虎 — unrelated to the six-gods of the same name.
+// ---------------------------------------------------------------------------
+type Flank = "青龙" | "白虎" | "axis";
+
+const DIR8_DEG: Record<Dir8, number> = {
+  N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315,
+};
+
+export function flankOfSector(facing: Dir8, sector: Dir8): Flank {
+  // Signed offset of the sector from the facing axis, normalised to (-180, 180].
+  const offset =
+    ((((DIR8_DEG[sector] - DIR8_DEG[facing]) % 360) + 540) % 360) - 180;
+  if (offset === 0 || Math.abs(offset) === 180) return "axis"; // dead ahead / behind
+  return offset < 0 ? "青龙" : "白虎"; // left of the facing axis = dragon
+}
+
+// How 动/yang each room is — how much it WANTS the active 青龙 side. Negative =
+// 静/yin, content on the quiet 白虎. A product knob, like the score weights; the
+// 龙动虎静 direction itself is classical.
+const ROOM_ACTIVITY: Record<RoomKind, number> = {
+  kitchen: 1.0, // 灶 — fire, the most active
+  living: 0.8,
+  entrance: 0.7, // 气口
+  dining: 0.6,
+  study: 0.5,
+  master: 0.3,
+  bedroom: -0.4, // rest — yin
+  bathroom: -0.3, // yin
+  other: 0,
+};
+
+// Modest, tunable weights — the flank nudges the score, it doesn't dominate it
+// (the 玄空飞星/八宅 core moves it ±5).
+const FLANK_NORM = 1.5; // activity gap that saturates the [-1,1] quality
+const FLANK_WEIGHT = 0.8; // max ± points the balance moves the 0–10 score
+const TIGER_STOVE_PENALTY = 0.6; // extra drop for a stove on the 白虎 (白虎煞)
+
+export type FlankAssessment = {
+  quality: number; // [-1,1]: + = 龙动虎静 (good), − = 白虎抬头 (tiger over-strong)
+  dragon: string[]; // room labels on the 青龙 side
+  tiger: string[]; // room labels on the 白虎 side
+  tigerStove: boolean; // a stove sits on the 白虎 side → 白虎煞
+  factors: FloorPlanFactor[]; // the 峦头 factor(s) this produces
+};
+
+// The balance is a secondary signal — capped at 2; severity 3 is reserved for
+// the specific 白虎煞 (stove on the tiger).
+function flankSeverity(quality: number): 1 | 2 {
+  return Math.abs(quality) >= 0.6 ? 2 : 1;
+}
+
+/**
+ * Interior 青龙白虎 from (facing, rooms): which flank each room falls on, the
+ * activity balance between the two sides, and the 峦头 factor(s) it yields. Pure.
+ */
+export function assessFlanks(facing: Dir8, rooms: RoomInput[]): FlankAssessment {
+  let dragonAct = 0;
+  let tigerAct = 0;
+  const dragon: string[] = [];
+  const tiger: string[] = [];
+  let tigerStove = false;
+
+  for (const room of rooms) {
+    const dir = DIR8.includes(room.sector as Dir8) ? (room.sector as Dir8) : null;
+    if (!dir) continue;
+    const flank = flankOfSector(facing, dir);
+    if (flank === "axis") continue;
+    const kind = classifyRoom(room.name);
+    if (flank === "青龙") {
+      dragonAct += ROOM_ACTIVITY[kind];
+      dragon.push(ROOM_LABEL[kind]);
+    } else {
+      tigerAct += ROOM_ACTIVITY[kind];
+      tiger.push(ROOM_LABEL[kind]);
+      if (kind === "kitchen") tigerStove = true;
+    }
+  }
+
+  const quality = Math.max(-1, Math.min(1, (dragonAct - tigerAct) / FLANK_NORM));
+  const factors: FloorPlanFactor[] = [];
+  // No room on either flank → nothing to say.
+  if (dragon.length || tiger.length) {
+    factors.push(balanceFactor(quality, dragon, tiger));
+    if (tigerStove) factors.push(tigerStoveFactor());
+  }
+
+  return { quality, dragon, tiger, tigerStove, factors };
+}
+
+function balanceFactor(
+  quality: number,
+  dragon: string[],
+  tiger: string[],
+): FloorPlanFactor {
+  const sides =
+    `青龙 (left): ${dragon.length ? dragon.join("、") : "—"}; ` +
+    `白虎 (right): ${tiger.length ? tiger.join("、") : "—"}.`;
+  if (quality >= 0.15) {
+    return {
+      type: "positive",
+      severity: flankSeverity(quality),
+      title: "青龙白虎 · 龙动虎静",
+      principle: "峦头",
+      description: `Activity weights to the 青龙 (left/dragon) side while the 白虎 (right/tiger) stays quieter — the favourable 龙动虎静. ${sides}`,
+    };
+  }
+  if (quality <= -0.15) {
+    return {
+      type: "negative",
+      severity: flankSeverity(quality),
+      title: "青龙白虎 · 白虎抬头",
+      principle: "峦头",
+      description: `The 白虎 (right/tiger) side carries more activity than the 青龙 (left/dragon) — 白虎抬头, classically linked to friction and instability. Move active rooms toward the dragon side or keep the tiger quieter. ${sides}`,
+    };
+  }
+  return {
+    type: "positive",
+    severity: 1,
+    title: "青龙白虎 · 均衡",
+    principle: "峦头",
+    description: `The 青龙 (dragon) and 白虎 (tiger) sides are roughly balanced; doctrine prefers the dragon to lead slightly. ${sides}`,
+  };
+}
+
+function tigerStoveFactor(): FloorPlanFactor {
+  return {
+    type: "negative",
+    severity: 3,
+    title: "白虎煞 · 灶居白虎",
+    principle: "峦头",
+    description:
+      "The stove sits on the 白虎 (right/tiger) side — fire on the tiger (白虎煞), classically associated with arguments, accidents and health strain. Relocating the stove toward the 青龙 side or a quieter sector is the standard remedy.",
+  };
+}
+
 /**
  * The deterministic reading. `rooms` come from perception (the LLM or a confirmed
  * layout); everything here is pure computation from (facing, period, rooms).
@@ -140,11 +281,24 @@ export function computeUnitReading(
   }
 
   const wavg = wSum > 0 ? qSum / wSum : 0;
-  const score = Math.max(0, Math.min(10, Math.round((5 + 5 * wavg) * 10) / 10));
 
-  // Keep the most significant factors (by severity), cap the noise.
-  factors.sort((a, b) => b.severity - a.severity);
-  const trimmed = factors.slice(0, 7);
+  // 青龙白虎 (form-school): a modest adjustment on top of the 八宅/玄空 base.
+  const flank = assessFlanks(facing, rooms);
+  let adj = FLANK_WEIGHT * flank.quality;
+  if (flank.tigerStove) adj -= TIGER_STOVE_PENALTY;
+  const score = Math.max(
+    0,
+    Math.min(10, Math.round((5 + 5 * wavg + adj) * 10) / 10),
+  );
+
+  // Always surface the 青龙白虎 factor(s); fill the rest with the most
+  // significant room factors (by severity), capped to keep the noise down.
+  const roomFactors = factors
+    .sort((a, b) => b.severity - a.severity)
+    .slice(0, Math.max(0, 7 - flank.factors.length));
+  const trimmed = [...flank.factors, ...roomFactors].sort(
+    (a, b) => b.severity - a.severity,
+  );
 
   return {
     facing,
