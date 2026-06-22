@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeUnitReading } from "./unit-reading";
+import { assessFlanks, computeUnitReading, flankOfSector } from "./unit-reading";
 
 // ---------------------------------------------------------------------------
 // The unit reading is the deterministic engine: same (facing, year, rooms) →
@@ -64,5 +64,91 @@ describe("computeUnitReading — placement verdicts (坎宅, facing S)", () => {
     ]);
     expect(r.factors).toHaveLength(0);
     expect(r.score).toBe(5); // no placeable rooms → neutral
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 青龙白虎 (form-school flanks). Standing at the centre looking out the front
+// (the facing): left of that axis = 青龙 (dragon, active), right = 白虎 (tiger,
+// quiet). Classical 龙动虎静 — the dragon should out-rank the tiger in activity;
+// fire (the stove) on the tiger is 白虎煞.
+// ---------------------------------------------------------------------------
+describe("青龙白虎 — form-school flanks (interior)", () => {
+  it("splits sectors left/right of the facing axis (青龙 left, 白虎 right)", () => {
+    // Facing N: west is on your left (青龙), east on your right (白虎).
+    expect(flankOfSector("N", "W")).toBe("青龙");
+    expect(flankOfSector("N", "E")).toBe("白虎");
+    expect(flankOfSector("N", "N")).toBe("axis"); // dead ahead
+    expect(flankOfSector("N", "S")).toBe("axis"); // directly behind
+    // Facing S flips the sides.
+    expect(flankOfSector("S", "E")).toBe("青龙");
+    expect(flankOfSector("S", "W")).toBe("白虎");
+  });
+
+  it("龙动虎静: active rooms on 青龙 read positive; on 白虎 read negative", () => {
+    // facing S → E is 青龙, W is 白虎.
+    const dragonActive = assessFlanks("S", [
+      { name: "Kitchen", sector: "E" }, // active, on the dragon
+      { name: "Bedroom", sector: "W" }, // quiet, on the tiger
+    ]);
+    expect(dragonActive.quality).toBeGreaterThan(0);
+    expect(dragonActive.factors[0].type).toBe("positive");
+    expect(dragonActive.factors[0].principle).toBe("峦头");
+
+    const tigerActive = assessFlanks("S", [
+      { name: "Bedroom", sector: "E" }, // quiet, on the dragon
+      { name: "Living", sector: "W" }, // active, on the tiger
+    ]);
+    expect(tigerActive.quality).toBeLessThan(0);
+    expect(tigerActive.factors.some((f) => f.type === "negative")).toBe(true);
+  });
+
+  it("flags 白虎煞 (severity 3) when the stove sits on the 白虎 side", () => {
+    const onTiger = assessFlanks("S", [{ name: "Kitchen", sector: "W" }]); // 白虎
+    expect(onTiger.tigerStove).toBe(true);
+    const sha = onTiger.factors.find(
+      (f) => f.type === "negative" && f.severity === 3,
+    );
+    expect(sha).toBeTruthy();
+    expect(sha?.principle).toBe("峦头");
+    // The same stove on the dragon side is not 白虎煞.
+    expect(assessFlanks("S", [{ name: "Kitchen", sector: "E" }]).tigerStove).toBe(
+      false,
+    );
+  });
+
+  it("always surfaces a 青龙白虎 factor in the full reading, tagged 峦头", () => {
+    const r = computeUnitReading("S", 2024, [
+      { name: "Kitchen", sector: "E" },
+      { name: "Bedroom", sector: "W" },
+    ]);
+    expect(
+      r.factors.some((f) => /青龙白虎|白虎/.test(f.title) && f.principle === "峦头"),
+    ).toBe(true);
+  });
+
+  it("a stove on 白虎 lowers the score vs the same stove on 青龙", () => {
+    const dragon = computeUnitReading("S", 2024, [{ name: "Kitchen", sector: "E" }]);
+    const tiger = computeUnitReading("S", 2024, [{ name: "Kitchen", sector: "W" }]);
+    expect(dragon.score).toBeGreaterThan(tiger.score);
+  });
+
+  it("emits no flank factor when nothing sits on either flank", () => {
+    const r = computeUnitReading("S", 2024, [
+      { name: "Hall", sector: "N" }, // axis (dead ahead)
+      { name: "Store", sector: "center" }, // unplaceable
+    ]);
+    expect(r.factors.every((f) => !/青龙|白虎/.test(f.title))).toBe(true);
+  });
+
+  it("stays deterministic with the flank layer", () => {
+    const rooms = [
+      { name: "Kitchen", sector: "E" },
+      { name: "Master Bedroom", sector: "W" },
+    ];
+    const a = computeUnitReading("S", 2024, rooms);
+    const b = computeUnitReading("S", 2024, rooms);
+    expect(a.score).toBe(b.score);
+    expect(a.factors).toEqual(b.factors);
   });
 });
